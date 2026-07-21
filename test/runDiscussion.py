@@ -1,8 +1,9 @@
-from Data import DEPARTMENTS
-from RoomManager import create_project, create_room, get_department_members, save_decision, update_short_summary
-from Discussion import department_discussion_loop
-from RoomManager import get_persona
-from Memory import summarize_discussion, extract_decisions
+from simulation.data.departments import DEPARTMENTS
+from simulation.db.write import create_project, create_room, update_short_summary, save_decision
+from simulation.db.read import get_department_members, get_persona
+from simulation.meeting.department_meeting import department_discussion_loop
+from simulation.memory.make_summary import make_summary
+from simulation.memory.extract_decisions import extract_decisions
 
 def main():
     project_id = "proj_test_0010"
@@ -39,7 +40,7 @@ def main():
     print("--- 議論ループが完了しました ---")
 
     # 4. 議論全文からshort_summary(中期記憶)を作って保存
-    summary = summarize_discussion(task_text, full_transcript)
+    summary = make_summary(task_text, full_transcript)
     update_short_summary(room_id, summary)
     print(f"\n[要約]\n{summary}\n")
  
