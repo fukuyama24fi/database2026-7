@@ -1,30 +1,13 @@
-from data import DEPARTMENTS
-from roomManager import (
-    create_project,
-    create_room,
-    get_department_members,
-    get_persona,
-    append_message_to_room,
-)
-from llmClient import ask_llm
+﻿import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-def build_system_prompt(display_name, persona):
-    """personaの中身(judgment_anchor・style_persona)からLLM用のsystem_promptを組み立てる"""
-    anchor = persona["judgment_anchor"]
-    style = persona["style_persona"]
-
-    return f"""あなたは{display_name}です。
-【あなたの判断軸(絶対に譲らない基準)】
-重視すること: {"、".join(anchor["primary_questions"])}
-絶対に許容しないこと: {"、".join(anchor["auto_reject_conditions"])}
-
-【あなたの話し方】
-トーン: {style["tone"]}
-よく使う言い回し: {"、".join(style["phrases"])}
-文の傾向: {style["sentence_tendency"]}
-
-上記の判断軸に沿って、簡潔に日本語で発言してください。"""
+from data.departments import DEPARTMENTS
+from db.read import get_department_members, get_persona
+from db.write import add_message_to_room, create_project, create_room
+from llm.ask_llm import ask_llm
+from prompts.build_system_prompt import build_system_prompt
 
 
 def main():
@@ -57,7 +40,7 @@ def main():
     print(f"\n[{member['display_name']}の発言]\n{reply}\n")
 
     # 4. 発言をrecent_messagesに保存する
-    append_message_to_room(room_id, member["display_name"], reply)
+    add_message_to_room(room_id, member["display_name"], reply)
 
 
 if __name__ == "__main__":
