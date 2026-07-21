@@ -78,6 +78,21 @@ def init_db():
     ''')
     print("department_members_masterテーブルを作成しました")
 
+    #ルーム参加記録テーブル(room_assignments)(誰がいつどの立場でルームに入ったかを記録)
+    db_operator.execute('''
+    CREATE TABLE IF NOT EXISTS room_assignments (
+        id SERIAL PRIMARY KEY,
+        room_id TEXT NOT NULL, --department_rooms.room_idの論理FK
+        member_id TEXT NOT NULL, --department_members_master.member_idの論理FK
+        role_in_room TEXT, --"initial"(初期)または"scouted"(スカウト)
+        assigned_at_turn INTEGER NOT NULL, --何ターン目にアサインされたか(初期は0)
+        released_at_turn INTEGER, --離脱ターン(今回は未使用。将来用)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(room_id, member_id) --同じ人を同じルームに二重登録しない
+    )
+    ''')
+    print("room_assignmentsテーブルを作成しました")
+
     #経営陣テーブル(executives_master)(CEO,CTO,CFO,CQO)
     db_operator.execute('''
     CREATE TABLE IF NOT EXISTS executives_master (

@@ -120,3 +120,22 @@ def add_message_to_room(room_id, speaker, message):
     cur.close()
     conn.close()
     print(f"room={room_id} に発言を追加しました({speaker})")
+
+
+def assign_member_to_room(room_id, member_id, role_in_room, turn):
+    #新規: room_assignmentsに1行INSERTする。同じ人を二重登録してもエラーにしない
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO room_assignments
+            (room_id, member_id, role_in_room, assigned_at_turn)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (room_id, member_id) DO NOTHING
+        """,
+        (room_id, member_id, role_in_room, turn),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"room={room_id} にメンバー({member_id}, {role_in_room})をアサインしました")

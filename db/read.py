@@ -38,6 +38,70 @@ def get_department_members(department_name, count=2):
     return members
 
 
+def get_department_members_by_skill(
+    department_id, required_skills, count, exclude_member_ids=None
+):
+    #新規: 指定部署から、required_skillsとの一致数が多い順にメンバーをcount人取得する
+    #exclude_member_ids: すでにルームにいる人を除外する(スカウト時に使う)
+    if exclude_member_ids is None:
+        exclude_member_ids = []
+
+    conn = connect_db()
+    cur = conn.cursor()
+
+    if exclude_member_ids:
+        cur.execute(
+            """
+            SELECT member_id, display_name, personality, skills, agent_persona_id
+            FROM department_members_master
+            WHERE department_id = %s
+              AND is_active = TRUE
+              AND member_id NOT IN %s
+            """,
+            (department_id, tuple(exclude_member_ids)),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT member_id, display_name, personality, skills, agent_persona_id
+            FROM department_members_master
+            WHERE department_id = %s AND is_active = TRUE
+            """,
+            (department_id,),
+        )
+
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    members = []
+    for row in rows:
+        members.append(
+            {
+                "member_id": row[0],
+                "display_name": row[1],
+                "personality": row[2],
+                "skills": row[3],
+                "agent_persona_id": row[4],
+            }
+        )
+
+    if not required_skills:
+        return members[:count]
+
+    required_set = set(required_skills)
+
+    def skill_score(member):
+        try:
+            member_skills = json.loads(member["skills"]) if member["skills"] else []
+        except (json.JSONDecodeError, TypeError):
+            member_skills = []
+        return len(set(member_skills) & required_set)
+
+    members.sort(key=skill_score, reverse=True)
+    return members[:count]
+
+
 def get_persona(agent_persona_id):
     #agent_personasから1人分のjudgment_anchor/style_personaを取得する
     conn = connect_db()

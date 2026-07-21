@@ -12,7 +12,7 @@ def ask_managers_agreement(task_text, assignments):
 
     戻り値: [{"department_id":..., "verdict":"agree"または"disagree", "reason":"..."}]
     """
-    # 部長が「他部署の担当範囲と重複していないか」も判断できるよう、全体の配分を見せる
+    #部長が「他部署の担当範囲と重複していないか」も判断できるよう、全体の配分を見せる
     assignment_overview = "\n".join(
         f"{a['department_id']}: {a['sub_task_text']}" for a in assignments
     )
