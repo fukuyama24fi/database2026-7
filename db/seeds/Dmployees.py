@@ -2,7 +2,7 @@
 import json
 import random
 
-from data import (
+from Data import (
     DEPARTMENTS,
     personality_list,
     skill_map,

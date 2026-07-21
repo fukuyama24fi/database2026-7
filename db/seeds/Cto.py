@@ -1,8 +1,8 @@
 import json
 
-from data import DEPARTMENTS
-from roomManager import get_persona
-from discussion import build_system_prompt
+from Data import DEPARTMENTS
+from RoomManager import get_persona
+from Discussion import build_system_prompt
 from llmClient import ask_llm
 from Jsonutils import clean_json_response
 

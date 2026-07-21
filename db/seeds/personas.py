@@ -1,6 +1,6 @@
 import json
 
-from data import (
+from Data import (
     judgment_anchor_map,
     style_persona_map,
     executive_anchor_map,

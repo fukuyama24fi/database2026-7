@@ -1,4 +1,4 @@
-from config import LLM_PROVIDER, LLM_MODEL
+from Config import LLM_PROVIDER, LLM_MODEL
 from providers import groq_client
 from providers import gemini_client
 from providers import mistral_client

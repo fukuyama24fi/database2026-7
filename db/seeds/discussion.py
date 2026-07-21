@@ -1,4 +1,4 @@
-from roomManager import get_persona, get_recent_messages, append_message_to_room
+from RoomManager import get_persona, get_recent_messages, append_message_to_room
 from llmClient import ask_llm
 
 

@@ -1,4 +1,4 @@
-from data import (
+from Data import (
     DEPARTMENTS,
     executive_personality,
     manager_personality_map,

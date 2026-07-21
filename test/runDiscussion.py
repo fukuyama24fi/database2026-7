@@ -1,8 +1,8 @@
-from data import DEPARTMENTS
-from roomManager import create_project, create_room, get_department_members, save_decision, update_short_summary
-from discussion import department_discussion_loop
-from roomManager import get_persona
-from memory import summarize_discussion, extract_decisions
+from Data import DEPARTMENTS
+from RoomManager import create_project, create_room, get_department_members, save_decision, update_short_summary
+from Discussion import department_discussion_loop
+from RoomManager import get_persona
+from Memory import summarize_discussion, extract_decisions
 
 def main():
     project_id = "proj_test_0010"

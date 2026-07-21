@@ -1,6 +1,6 @@
 import json
 
-from roomManager import get_persona, get_department_leader
+from RoomManager import get_persona, get_department_leader
 from llmClient import ask_llm
 from Jsonutils import clean_json_response
 
@@ -16,7 +16,7 @@ def check_consensus(department_id, task_text, full_transcript):
 
     戻り値: {"consensus_reached": True/False, "reason": "..."}
     """
-    from discussion import build_system_prompt  # 遅延import
+    from Discussion import build_system_prompt  # 遅延import
 
     leader = get_department_leader(department_id)
     if leader is None:

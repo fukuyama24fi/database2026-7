@@ -1,5 +1,5 @@
-from employees import generate_employee_rows
-from leadership import generate_leadership_rows
+from Dmployees import generate_employee_rows
+from Leadership import generate_leadership_rows
 
 from db_writer import (
     write_employees_to_db,

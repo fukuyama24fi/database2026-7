@@ -1,16 +1,16 @@
-from data import DEPARTMENTS
-from roomManager import (
+from Data import DEPARTMENTS
+from RoomManager import (
     create_project,
     create_room,
     get_department_members,
     update_short_summary,
     save_decision,
 )
-from discussion import department_discussion_loop
-from memory import summarize_discussion, extract_decisions
+from Discussion import department_discussion_loop
+from Memory import summarize_discussion, extract_decisions
 from Cto import assign_departments
 from Cqo import audit_department
-from Alignment import run_alignment_meeting
+from ExecMetting import run_alignment_meeting
 
 
 def run_department_room(project_id, department_id, sub_task_text, room_suffix):
@@ -56,7 +56,7 @@ def run_department_room(project_id, department_id, sub_task_text, room_suffix):
 
 
 def main():
-    project_id = "proj_test_500"
+    project_id = "proj_test_600"
     task_text = "Webアプリ版ポモドーロタイマーのログイン画面のUIをどう設計するか検討してください"
 
     create_project(project_id)

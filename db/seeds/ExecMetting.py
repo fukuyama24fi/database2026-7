@@ -3,8 +3,8 @@
 
 import json
 
-from roomManager import get_persona, get_department_leader
-from discussion import build_system_prompt
+from RoomManager import get_persona, get_department_leader
+from Discussion import build_system_prompt
 from llmClient import ask_llm
 from Jsonutils import clean_json_response
 from Cto import revise_assignments
