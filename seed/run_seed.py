@@ -1,4 +1,9 @@
-﻿from seed.make_employees import make_employee_data
+﻿import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from seed.make_employees import make_employee_data
 from seed.make_leaders import make_leader_data
 from seed.writer import (
     write_employees_to_db,

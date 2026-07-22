@@ -139,3 +139,23 @@ def assign_member_to_room(room_id, member_id, role_in_room, turn):
     cur.close()
     conn.close()
     print(f"room={room_id} にメンバー({member_id}, {role_in_room})をアサインしました")
+
+
+def update_room_status(room_id, status, retry_count=None):
+    #変更: 部長レビュー・差し戻しに伴い、ルームのstatus/retry_countを更新する
+    conn = connect_db()
+    cur = conn.cursor()
+    if retry_count is None:
+        cur.execute(
+            "UPDATE department_rooms SET status = %s WHERE room_id = %s",
+            (status, room_id),
+        )
+    else:
+        cur.execute(
+            "UPDATE department_rooms SET status = %s, retry_count = %s WHERE room_id = %s",
+            (status, retry_count, room_id),
+        )
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"room={room_id} のstatus={status}, retry_count={retry_count} を更新しました")

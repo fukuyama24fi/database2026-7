@@ -1,9 +1,7 @@
-﻿import json
-
-from db.read import get_department_leader, get_persona
+﻿from db.read import get_department_leader, get_persona
 from llm.ask_llm import ask_llm
 from prompts.build_system_prompt import build_system_prompt
-from utils.parse_json import clean_json_response
+from utils.parse_json import parse_llm_json
 
 # PMの役割:議論の進行と合意形成の判断
 
@@ -59,15 +57,13 @@ def pm_check_agreement(department_id, task_text, turn_summaries, current_turn_me
 
 {{
   "consensus_reached": trueまたはfalse,
-  "reason": "判断理由(簡潔に)"
+  "reason": "判断理由(簡潔に・1行のみ・改行不可)"
 }}"""
 
     raw = ask_llm(system_prompt, user_prompt)
-    cleaned = clean_json_response(raw)
+    result = parse_llm_json(raw)
 
-    try:
-        result = json.loads(cleaned)
-    except json.JSONDecodeError:
+    if result is None:
         print("PMの合意判定がJSONとして解析できませんでした:")
         print(raw)
         result = {"consensus_reached": False, "reason": "解析失敗のため議論を継続します"}
@@ -127,16 +123,14 @@ def pm_decide_scouting(
 
 {{
   "needs_scout": trueまたはfalse,
-  "reason": "判断理由(簡潔に)",
+  "reason": "判断理由(簡潔に・1行のみ・改行不可)",
   "needed_skills": ["不足していると感じるスキル名", "..."]
 }}"""
 
     raw = ask_llm(system_prompt, user_prompt)
-    cleaned = clean_json_response(raw)
+    result = parse_llm_json(raw)
 
-    try:
-        result = json.loads(cleaned)
-    except json.JSONDecodeError:
+    if result is None:
         print("PMのスカウト判定がJSONとして解析できませんでした:")
         print(raw)
         result = {
@@ -144,5 +138,8 @@ def pm_decide_scouting(
             "reason": "解析失敗のためスカウトなしとみなします",
             "needed_skills": [],
         }
+
+    if "needed_skills" not in result:
+        result["needed_skills"] = []
 
     return result

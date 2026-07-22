@@ -7,10 +7,18 @@ def build_user_prompt(task_text, recent_messages, reference_context=None): #参�
     else:
         history_text = "(まだ発言はありません)"
 
+    #変更: 部長差し戻し時にrevision_reportをメンバーへ渡す
+    reference_section = ""
+    if reference_context:
+        reference_section = f"""
+【部長からの差し戻し指摘】
+{reference_context}
+"""
+
     return f"""タスク: {task_text}
 これまでの会話:
 {history_text}
-
+{reference_section}
 あなたは次の発言者です。
 
 前の発言に賛成・反対・補足・改善案を述べてください。

@@ -6,7 +6,7 @@ from roles.cto import cto_assign_tasks
 
 
 def main():
-    project_id = "proj_test_900"
+    project_id = "proj_test_120"
     task_text = "Webアプリ版ポモドーロタイマーのログイン画面のUIをどう設計するか検討してください"
 
     create_project(project_id)
@@ -41,8 +41,14 @@ def main():
     # 3. CQOが各部署の決定事項を監査する
     print("\n=== CQOによる監査 ===")
     for result in results:
+        #変更: 部長強制承認時は制作物・懸念レポートもCQOへ渡す
         verdict = cqo_check_decisions(
-            result["department_id"], result["sub_task_text"], result["decisions"]
+            result["department_id"],
+            result["sub_task_text"],
+            result["decisions"],
+            deliverables_text=result.get("deliverables_text"),
+            concerns_report=result.get("concerns_report"),
+            forced_approval=(result.get("status") == "forced_approved"),
         )
         print(f"[{result['department_id']}] {verdict['verdict']} - {verdict['reason']}")
 

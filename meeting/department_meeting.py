@@ -15,6 +15,9 @@ def department_discussion_loop(
     reference_context=None,
     department_id=None,
     min_turns_before_check=2,
+    start_turn_number=1,
+    accumulated_transcript=None,
+    accumulated_turn_summaries=None,
 ):
     """1部署ルームで、メンバー全員がmax_turns回ずつ発言するループ
  
@@ -26,10 +29,19 @@ def department_discussion_loop(
         "turn_summaries": 各ターンの要約リスト(short_summary生成用)
     }
     """
-    full_transcript = []
-    turn_summaries = []  #新規: 各ターン終了後に要約を貯め、PM判定のトークン削減に使う
+    #変更: 差し戻し後の延長ブロックでも議論を引き継ぐため、呼び出し元のリストに追記する
+    if accumulated_transcript is None:
+        full_transcript = []
+    else:
+        full_transcript = accumulated_transcript
+
+    if accumulated_turn_summaries is None:
+        turn_summaries = []
+    else:
+        turn_summaries = accumulated_turn_summaries
  
-    for turn in range(max_turns):
+    for turn_offset in range(max_turns):
+        turn_number = start_turn_number + turn_offset  #変更: 延長時もターン番号を連番にする
         turn_start_index = len(full_transcript)  #新規: このターンの発言開始位置を記録
 
         for member in members:
@@ -44,7 +56,7 @@ def department_discussion_loop(
             user_prompt = build_user_prompt(task_text, recent_messages, reference_context)
  
             reply = ask_llm(system_prompt, user_prompt)
-            print(f"[ターン{turn + 1}] {member['display_name']}: {reply}")
+            print(f"[ターン{turn_number}] {member['display_name']}: {reply}")
  
             full_transcript.append({"speaker": member["display_name"], "message": reply})
             add_message_to_room(room_id, member["display_name"], reply)
@@ -54,7 +66,7 @@ def department_discussion_loop(
 
         # 1ターン(全員が1回ずつ発言)終わるごとに、PMが合意形成できたか判定する
         if department_id:
-            if (turn + 1) >= min_turns_before_check:
+            if (turn_offset + 1) >= min_turns_before_check:
                 consensus = pm_check_agreement(
                     department_id,
                     task_text,
@@ -98,21 +110,21 @@ def department_discussion_loop(
                                 room_id,
                                 candidate["member_id"],
                                 "scouted",
-                                turn + 1,
+                                turn_number,
                             )
                             members.append(candidate)
                             print(
                                 f"[スカウト] {candidate['display_name']} がルームに追加されました"
-                                f" (ターン{turn + 2}から参加)"
+                                f" (ターン{turn_number + 1}から参加)"
                             )
 
         #新規: 合意有無に関わらず毎ターン要約を貯める(最終short_summary用。合意ターンも欠落させない)
         turn_summary = make_turn_summary(task_text, this_turn_messages)
-        turn_summaries.append({"turn_number": turn + 1, "summary": turn_summary})
-        print(f"[ターン{turn + 1}要約] {turn_summary}")
+        turn_summaries.append({"turn_number": turn_number, "summary": turn_summary})
+        print(f"[ターン{turn_number}要約] {turn_summary}")
 
         if consensus_reached:
-            print(f"ターン{turn + 1}で合意形成を確認したため、議論を早期終了します")
+            print(f"ターン{turn_number}で合意形成を確認したため、議論を早期終了します")
             break
  
     return {
