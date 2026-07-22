@@ -1,7 +1,18 @@
 CHAT_MAX_CHARS = 200  #変更: メンバー進行用chatの最大文字数
 
+from prompts.json_format_rules import JSON_FORMAT_RULES, MEMBER_JSON_EXAMPLE
 
-def build_user_prompt(task_text, recent_messages, reference_context=None, current_spec=""):
+
+def build_user_prompt(
+    task_text,
+    recent_messages,
+    reference_context=None,
+    current_spec="",
+    team_memo="",
+    expects_code=True,
+    member_role="未割当",
+    peer_context="",
+):
     """直近の会話履歴(短期記憶)を踏まえたuser_promptを組み立てる"""
     if recent_messages:
         history_text = "\n".join(
@@ -18,6 +29,23 @@ def build_user_prompt(task_text, recent_messages, reference_context=None, curren
 {reference_context}
 """
 
+    #変更: 参加メンバーのスキル・性格一覧
+    if team_memo:
+        team_section = f"""
+【チームメンバー(team_memo.txt)】
+{team_memo}
+"""
+    else:
+        team_section = ""
+
+    #変更: 先行部署のspec/D-list概要(後続部署が参照)
+    if peer_context:
+        peer_section = f"""
+{peer_context}
+"""
+    else:
+        peer_section = ""
+
     #変更: 全員共有の成果物spec.txtの現状を渡す(議論の本体はここに書く)
     if current_spec:
         spec_section = f"""
@@ -30,28 +58,45 @@ def build_user_prompt(task_text, recent_messages, reference_context=None, curren
 (まだ内容はありません)
 """
 
+    if expects_code:
+        artifact_guide = """- 次のような「実装可能な具体情報」を優先して書く:
+  * 画面/コンポーネント名、入力項目(名前・型・必須・placeholder・エラー文言)
+  * API/データ構造(JSONキー名)、状態管理の変数名、画面遷移条件
+  * 書ける場合はコード片(HTML/CSS/TSX/Python等)"""
+    else:
+        artifact_guide = """- 本タスクは設計・デザイン担当のため、コードは不要。次のような「具体的な設計仕様」を書く:
+  * 画面構成・ワイヤー・情報設計・コンポーネント名・レイアウト(配置・サイズ)
+  * 色・ typography・状態(通常/エラー/ disabled)・遷移条件
+  * 入力項目定義(名前・必須・バリデーション・エラー文言)"""
+    #変更: タスク種別(設計/実装)でartifact_updateの指示を分ける
+
     return f"""タスク: {task_text}
+{team_section}
+{peer_section}
 {spec_section}
 これまでの会話(直近):
 {history_text}
 {reference_section}
 あなたは次の発言者です。
+あなたの担当役割(PM割当): {member_role}
+- 自分の担当役割の範囲のみ spec.txt を更新すること。他メンバーの担当領域に書かない。
 
 【成果物の書き方(spec.txt / artifact_update)】
-- 議論の本体は必ず artifact_update に書く。chat は「何を更新したか」の報告のみ(最大{CHAT_MAX_CHARS}字)
-- 毎ターン、artifact_update で spec.txt 全文を更新すること(変更がなければ空文字 "" は不可。必ず1つ以上の具体項目を追加・修正)
-- 次のような「実装可能な具体情報」を優先して書く:
-  * 画面/コンポーネント名、入力項目(名前・型・必須・placeholder・エラー文言)
-  * API/データ構造(JSONキー名)、状態管理の変数名、画面遷移条件
-  * レイアウト(配置・サイズ・クラス名)、アクセシビリティ属性(aria-*)
-  * 書ける場合はコード片(HTML/CSS/TSX/Python等)。将来の実装・部長検収の材料にする
+- 議論の本体は artifact_update に書く。chat は「何を更新したか」の報告のみ(最大{CHAT_MAX_CHARS}字)
+- artifact_update は spec.txt の最新版全文(1つの統一フォーマット)。Markdown見出し形式を推奨
+- 「# 追記・修正」など履歴セクションは書かない(旧版はシステムが spec_history.txt に自動保存)
+- 既存 spec.txt をベースに、自分の担当範囲を反映した完全版を毎回出力すること
+- 毎ターン、1つ以上の具体項目を追加・修正すること(空文字 "" は不可)
+{artifact_guide}
 - 次のような「一般論だけ」は chat にも spec にも書かない:
-  * 「UXを向上させる」「ユーザー目線が重要」「デザインの一貫性が大切」など中身のない文
-  * タスクに紐づかない抽象論・教科書的説明
+  * 「UXを向上させる」「ユーザー目線が重要」など中身のない抽象論
+  * タスクに紐づかない教科書的説明
 
 出力は必ず以下のJSON形式のみにしてください。前置きや説明文、コードブロック記号(```)はJSONの外に書かないでください。
+{JSON_FORMAT_RULES}
+{MEMBER_JSON_EXAMPLE}
 - chat: 最大{CHAT_MAX_CHARS}字・1行のみ・改行不可
-- artifact_update: spec.txt の新しい全文(JSON文字列内で改行可)
+- artifact_update: spec.txt の新しい全文(JSON文字列内で改行可。値はすべて "" で囲む)
 
 {{
   "chat": "...",

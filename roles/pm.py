@@ -78,8 +78,17 @@ def pm_decide_scouting(
     current_turn_messages,
     current_member_names,
     current_team_size,
+    parse_error_count=0,
 ):
-    #新規: PMが議論を読み、スキル不足や停滞により追加メンバー(スカウト)が必要か判断する
+    #変更: スキル不足・議論停滞のみでスカウト判断。構文解析エラーは別問題
+    if parse_error_count > 0:
+        return {
+            "needs_scout": False,
+            "reason": f"構文解析エラー{parse_error_count}件のためスカウト不可",
+            "needed_skills": [],
+            "blocked_by_parse_error": True,
+        }
+
     leader = get_department_leader(department_id)
     if leader is None:
         return {
@@ -113,9 +122,14 @@ def pm_decide_scouting(
 直近ターンの発言全文:
 {current_turn_text}
 
-上記の議論を踏まえ、以下のいずれかに該当する場合は追加メンバー(スカウト)が必要と判断してください。
-- 現在のメンバーのスキルではタスク遂行に不足がある
-- 議論が停滞しており、別視点・専門性を持つメンバーが必要
+上記の議論を踏まえ、以下のいずれかに該当する場合のみ追加メンバー(スカウト)が必要と判断してください。
+- 現在のメンバーのスキルではタスク遂行に不足がある(スキルギャップ)
+- 議論が停滞しており、別視点・専門性を持つメンバーが必要(セマンティックな行き詰まり)
+
+重要: 以下はスカウト理由にしないでください。
+- メンバー出力のJSON/構文解析エラー(Parse Error)
+- 「出力を解析できませんでした」等のフォーマット失敗
+- spec.txt更新の形式崩れ
 
 該当しない場合は needs_scout を false にしてください。
 
@@ -142,4 +156,83 @@ def pm_decide_scouting(
     if "needed_skills" not in result:
         result["needed_skills"] = []
 
+    #変更: PMが誤って構文エラーを停滞と判断してもPython側でスカウトをブロック
+    reason_text = str(result.get("reason", ""))
+    parse_error_keywords = ("解析", "JSON", "構文", "フォーマット", "形式", "parse")
+    if result.get("needs_scout") and any(k.lower() in reason_text.lower() for k in parse_error_keywords):
+        result["needs_scout"] = False
+        result["reason"] = "構文エラーはスカウト理由にしない(Python側でブロック)"
+        result["blocked_by_parse_error"] = True
+
     return result
+
+
+def pm_assign_member_roles(department_id, task_text, members, new_member_ids=None):
+    """PMがメンバー一人ひとりに重複しない担当役割を割り当てる
+
+    new_member_ids: スカウトで追加されたmember_idリスト(未指定なら全員)
+    戻り値: {member_id: task_role}
+    """
+    leader = get_department_leader(department_id)
+    if leader is None:
+        return {m["member_id"]: m.get("task_role", "未割当") for m in members}
+
+    persona = get_persona(leader["agent_persona_id_pm"])
+    if persona is None:
+        return {m["member_id"]: m.get("task_role", "未割当") for m in members}
+
+    if new_member_ids is None:
+        targets = members
+    else:
+        targets = [m for m in members if m["member_id"] in new_member_ids]
+
+    if not targets:
+        return {m["member_id"]: m.get("task_role", "未割当") for m in members}
+
+    system_prompt = build_system_prompt(leader["pm_name"], persona)
+    existing_roles = "\n".join(
+        f"- {m['display_name']}({m['member_id']}): {m.get('task_role', '未割当')}"
+        for m in members
+        if m.get("task_role") and m["member_id"] not in {t["member_id"] for t in targets}
+    ) or "(まだ役割割当なし)"
+    target_lines = "\n".join(
+        f"- {m['display_name']} ({m['member_id']}) スキル:{m.get('skills', '')}"
+        for m in targets
+    )
+
+    user_prompt = f"""タスク: {task_text}
+
+あなたはPMです。ルームメンバーが役割を奪い合わないよう、担当領域を明確に割り当ててください。
+既存メンバーの役割(変更不可):
+{existing_roles}
+
+役割を割り当てる対象:
+{target_lines}
+
+ルール:
+- 1人1役割。他メンバーと重複・競合しない具体的な担当名にする
+- 例:「レイアウト担当」「配色・タイポ担当」「入力項目・バリデーション担当」「コンポーネント構成担当」
+- 既存役割と被らないこと
+
+JSONのみ:
+{{
+  "assignments": [
+    {{"member_id": "mem_xxxxx", "task_role": "具体的担当名"}}
+  ]
+}}"""
+
+    raw = ask_llm(system_prompt, user_prompt)
+    result = parse_llm_json(raw)
+    role_map = {m["member_id"]: m.get("task_role", "未割当") for m in members}
+
+    if result and isinstance(result.get("assignments"), list):
+        for item in result["assignments"]:
+            mid = item.get("member_id")
+            role = item.get("task_role")
+            if mid and role:
+                role_map[mid] = str(role).strip()
+
+    for member in members:
+        member["task_role"] = role_map.get(member["member_id"], member.get("task_role", "未割当"))
+
+    return role_map

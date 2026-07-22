@@ -1,0 +1,5 @@
+room_id=room_proj_test_001_00
+department_id=UIUX
+status=approved
+is_suspicious=False
+decisions_count=2

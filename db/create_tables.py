@@ -35,6 +35,21 @@ def init_db():
     ''')
     print("department_room_decisionsテーブルを作成しました")
 
+    #変更: D-listの局所ロールバック用カラム(status/overridden, discarded_from_turn)
+    db_operator.execute('''
+    ALTER TABLE department_rooms_decisions
+        ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'
+    ''')
+    db_operator.execute('''
+    ALTER TABLE department_rooms_decisions
+        ADD COLUMN IF NOT EXISTS discarded_from_turn INTEGER
+    ''')
+    #変更: 決定事項が何ターン目で確定したか(origin_turn)。surgicalロールバック用
+    db_operator.execute('''
+    ALTER TABLE department_rooms_decisions
+        ADD COLUMN IF NOT EXISTS origin_turn INTEGER
+    ''')
+
     #プロジェクト状態管理テーブル(project_states)
     db_operator.execute('''
     CREATE TABLE IF NOT EXISTS project_states (
@@ -62,6 +77,20 @@ def init_db():
     )
     ''')
     print("department_rooms テーブルを作成しました")
+
+    #変更: 局所ロールバック用カラム(local_rollback_cursor, last_rejection_report, is_suspicious)
+    db_operator.execute('''
+    ALTER TABLE department_rooms
+        ADD COLUMN IF NOT EXISTS local_rollback_cursor INTEGER
+    ''')
+    db_operator.execute('''
+    ALTER TABLE department_rooms
+        ADD COLUMN IF NOT EXISTS last_rejection_report TEXT
+    ''')
+    db_operator.execute('''
+    ALTER TABLE department_rooms
+        ADD COLUMN IF NOT EXISTS is_suspicious BOOLEAN DEFAULT FALSE
+    ''')
 
     #部署別一般社員テーブル(department_menbers_master)
     db_operator.execute('''

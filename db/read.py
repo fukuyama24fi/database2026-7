@@ -164,3 +164,93 @@ def get_recent_messages(room_id):
     if row is None or not row[0]:
         return []
     return json.loads(row[0])
+
+
+def get_active_decisions(room_id):
+    #変更: CQO向けにactiveなD-listのみ取得する(overriddenは除外)
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT decision_id, decision_type, summary, rationale, scope_anchor, confidence, origin_turn
+        FROM department_rooms_decisions
+        WHERE room_id = %s AND status = 'active'
+        ORDER BY decision_id
+        """,
+        (room_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [
+        {
+            "decision_id": row[0],
+            "decision_type": row[1],
+            "summary": row[2],
+            "rationale": row[3],
+            "scope_anchor": row[4],
+            "confidence": row[5],
+            "origin_turn": row[6],
+        }
+        for row in rows
+    ]
+
+
+def get_decisions_by_ids(room_id, decision_ids):
+    #変更: surgicalロールバック対象の決定事項をdecision_id指定で取得する
+    if not decision_ids:
+        return []
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT decision_id, decision_type, summary, rationale, origin_turn, status
+        FROM department_rooms_decisions
+        WHERE room_id = %s AND decision_id = ANY(%s)
+        """,
+        (room_id, list(decision_ids)),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [
+        {
+            "decision_id": row[0],
+            "decision_type": row[1],
+            "summary": row[2],
+            "rationale": row[3],
+            "origin_turn": row[4],
+            "status": row[5],
+        }
+        for row in rows
+    ]
+
+
+def get_room_state(room_id):
+    #変更: 局所ロールバック再開用にルーム状態を取得する
+    conn = connect_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT status, retry_count, short_summary, local_rollback_cursor,
+               last_rejection_report, is_suspicious, original_task_text, department_name
+        FROM department_rooms
+        WHERE room_id = %s
+        """,
+        (room_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row is None:
+        return None
+    return {
+        "status": row[0],
+        "retry_count": row[1],
+        "short_summary": row[2],
+        "local_rollback_cursor": row[3],
+        "last_rejection_report": row[4],
+        "is_suspicious": row[5],
+        "original_task_text": row[6],
+        "department_name": row[7],
+    }

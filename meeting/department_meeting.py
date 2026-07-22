@@ -2,7 +2,9 @@
 from db.write import assign_member_to_room
 from meeting.member_turn import run_member_turn
 from memory.make_summary import make_turn_summary
-from roles.pm import pm_check_agreement, pm_decide_scouting
+from roles.pm import pm_assign_member_roles, pm_check_agreement, pm_decide_scouting
+from utils.parse_json import is_parser_error_message
+from workspace.io import write_team_memo
 
 
 def department_discussion_loop(
@@ -16,6 +18,7 @@ def department_discussion_loop(
     start_turn_number=1,
     accumulated_transcript=None,
     accumulated_turn_summaries=None,
+    peer_context="",
 ):
     """1部署ルームで、メンバー全員がmax_turns回ずつ発言するループ
  
@@ -41,14 +44,20 @@ def department_discussion_loop(
     for turn_offset in range(max_turns):
         turn_number = start_turn_number + turn_offset  #変更: 延長時もターン番号を連番にする
         turn_start_index = len(full_transcript)  #新規: このターンの発言開始位置を記録
+        turn_parse_errors = 0  #変更: ターン内の構文解析エラー数(PMスカウト判定から分離)
 
         for member in members:
             if get_persona(member["agent_persona_id"]) is None:
                 print(f"personaが見つかりません: {member['display_name']}")
                 continue
 
-            #変更: JSON(chat+artifact_update)方式で1人分の発言とspec.txt更新を行う
-            chat = run_member_turn(room_id, member, task_text, reference_context)
+            #変更: JSON(chat+artifact_update)方式。parse_errorを返す
+            turn_result = run_member_turn(
+                room_id, member, task_text, reference_context, peer_context=peer_context
+            )
+            chat = turn_result["chat"]
+            if turn_result.get("parse_error") or is_parser_error_message(chat):
+                turn_parse_errors += 1
             print(f"[ターン{turn_number}] {member['display_name']}: {chat}")
 
             full_transcript.append({"speaker": member["display_name"], "message": chat})
@@ -65,7 +74,7 @@ def department_discussion_loop(
                     turn_summaries,  #新規: 今回ターンはまだ含まない過去分のみ
                     this_turn_messages,
                 )
-                print(f"[PM判定] consensus_reached={consensus.get('consensus_reached')} - {consensus.get('reason')}")
+                print(f"[PM合意判定] consensus_reached={consensus.get('consensus_reached')} - {consensus.get('reason')}")
                 consensus_reached = bool(consensus.get("consensus_reached"))
 
                 #新規: 合意未達かつ8名未満のときのみスカウト判定
@@ -78,7 +87,13 @@ def department_discussion_loop(
                         this_turn_messages,
                         current_names,
                         len(members),
+                        parse_error_count=turn_parse_errors,
                     )
+                    if scout.get("blocked_by_parse_error"):
+                        print(
+                            f"[PMスカウト判定] スキップ: 構文解析エラー{turn_parse_errors}件 "
+                            f"(停滞と混同しない)"
+                        )
                     print(
                         f"[PMスカウト判定] needs_scout={scout.get('needs_scout')} "
                         f"- {scout.get('reason')}"
@@ -109,10 +124,20 @@ def department_discussion_loop(
                                 f"[スカウト] {candidate['display_name']} がルームに追加されました"
                                 f" (ターン{turn_number + 1}から参加)"
                             )
+                        #変更: スカウト追加後、PMが新メンバーへ重複しない役割を割り当てる
+                        new_ids = [c["member_id"] for c in candidates]
+                        pm_assign_member_roles(
+                            department_id, task_text, members, new_member_ids=new_ids
+                        )
+                        write_team_memo(room_id, members)
 
         #新規: 合意有無に関わらず毎ターン要約を貯める(最終short_summary用。合意ターンも欠落させない)
         turn_summary = make_turn_summary(task_text, this_turn_messages)
-        turn_summaries.append({"turn_number": turn_number, "summary": turn_summary})
+        turn_summaries.append({
+            "turn_number": turn_number,
+            "summary": turn_summary,
+            "message_end_index": len(full_transcript),  #変更: 局所ロールバック用
+        })
         print(f"[ターン{turn_number}要約] {turn_summary}")
 
         if consensus_reached:
