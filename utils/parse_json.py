@@ -1,5 +1,7 @@
 import re
 
+CHAT_MAX_CHARS = 200  #変更: メンバー進行用chatの最大文字数
+
 
 def clean_json_response(raw):
     """LLMが```json ... ```のようにコードブロックで囲んで返してくることがあるので、
@@ -57,3 +59,57 @@ def parse_llm_json(raw):
         return result
 
     return None
+
+
+def parse_member_response(raw):
+    """メンバー出力(JSON: chat + artifact_update)をパースし、chatは最大200字に切り詰める"""
+    import json
+
+    cleaned = clean_json_response(raw)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        data = {}
+        #変更: artifact_update内改行などでjson.loads失敗時、chat/artifact_updateだけ復元する
+        chat_match = re.search(
+            r'"chat"\s*:\s*"(.*?)"\s*,\s*"artifact_update"',
+            cleaned,
+            re.DOTALL,
+        )
+        if chat_match:
+            data["chat"] = chat_match.group(1).replace("\\n", " ").replace("\n", " ")
+
+        artifact_match = re.search(
+            r'"artifact_update"\s*:\s*"(.*)"\s*\}\s*$',
+            cleaned,
+            re.DOTALL,
+        )
+        if artifact_match:
+            data["artifact_update"] = artifact_match.group(1).replace("\\n", "\n")
+
+    if not isinstance(data, dict):
+        return None
+
+    chat = data.get("chat", "")
+    if isinstance(chat, list):
+        chat = " ".join(str(item) for item in chat)
+    chat = str(chat).replace("\n", " ").strip()
+    if len(chat) > CHAT_MAX_CHARS:
+        print(
+            f"変更: chatが{CHAT_MAX_CHARS}字を超えたため切り詰めます"
+            f"({len(chat)}字→{CHAT_MAX_CHARS}字)"
+        )
+        chat = chat[:CHAT_MAX_CHARS]
+
+    artifact = data.get("artifact_update", "")
+    if isinstance(artifact, list):
+        artifact = "\n".join(str(item) for item in artifact)
+    elif artifact is None:
+        artifact = ""
+    else:
+        artifact = str(artifact)
+
+    if not chat and not artifact:
+        return None
+
+    return {"chat": chat, "artifact_update": artifact}

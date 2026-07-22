@@ -6,7 +6,7 @@ from roles.cto import cto_assign_tasks
 
 
 def main():
-    project_id = "proj_test_120"
+    project_id = "proj_test_130"
     task_text = "Webアプリ版ポモドーロタイマーのログイン画面のUIをどう設計するか検討してください"
 
     create_project(project_id)

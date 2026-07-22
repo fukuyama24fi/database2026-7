@@ -62,3 +62,19 @@ def read_deliverables_text(room_id):
     if not parts:
         return "（未作成）"
     return "\n\n".join(parts)
+
+
+def read_spec_text(room_id):
+    #変更: 全員共有の成果物 spec.txt を読み込む
+    path = get_room_workspace(room_id) / "deliverables" / "spec.txt"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+def write_spec_text(room_id, content):
+    #変更: artifact_update で spec.txt を上書き保存する
+    deliverables = ensure_room_workspace(room_id) / "deliverables"
+    path = deliverables / "spec.txt"
+    path.write_text(content, encoding="utf-8")
+    print(f"workspace/{room_id}/deliverables/spec.txt を更新しました")

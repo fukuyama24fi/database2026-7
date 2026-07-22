@@ -9,6 +9,7 @@ from roles.manager import manager_review_deliverables
 from workspace.io import (
     ensure_room_workspace,
     read_deliverables_text,
+    read_spec_text,
     read_workspace_text,
     write_provisional_d_list,
     write_workspace_text,
@@ -88,7 +89,9 @@ def run_department_room(project_id, department_id, sub_task_text, room_suffix):
             f"→ 部長検収へ"
         )
 
-        provisional_decisions = extract_decisions(department_id, sub_task_text, full_transcript)
+        provisional_decisions = extract_decisions(
+            department_id, sub_task_text, full_transcript, spec_text=read_spec_text(room_id)
+        )
         d_list_text = write_provisional_d_list(room_id, provisional_decisions)
         summary_for_review = polish_final_summary(sub_task_text, turn_summaries)
         deliverables_text = read_deliverables_text(room_id)
@@ -144,7 +147,9 @@ def run_department_room(project_id, department_id, sub_task_text, room_suffix):
     update_short_summary(room_id, summary)
     update_room_status(room_id, final_status, retry_count=retry_count)
 
-    decisions = extract_decisions(department_id, sub_task_text, full_transcript)
+    decisions = extract_decisions(
+        department_id, sub_task_text, full_transcript, spec_text=read_spec_text(room_id)
+    )
     for idx, decision in enumerate(decisions):
         decision_id = f"dec_{room_id}_{idx:03d}"
         save_decision(

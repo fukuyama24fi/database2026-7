@@ -4,7 +4,7 @@ from llm.ask_llm import ask_llm
 from utils.parse_json import clean_json_response
 
 
-def extract_decisions(department_id, task_text, full_transcript):
+def extract_decisions(department_id, task_text, full_transcript, spec_text=None):
     """議論全文から確定した決定事項を抽出し、D-list用のリストを作る(長期記憶)。
     1つのdecisionには1つの決定内容だけを入れる。複数の決定がある場合は配列を分ける。
     戻り値: [{"decision_type":..., "summary":..., "rationale":..., "confidence":...}, ...]
@@ -12,6 +12,15 @@ def extract_decisions(department_id, task_text, full_transcript):
     transcript_text = "\n".join(
         f"{m['speaker']}: {m['message']}" for m in full_transcript
     )
+
+    #変更: chatは短文化したため、成果物spec.txtもD-list抽出の材料に含める
+    if spec_text:
+        spec_section = f"""
+【成果物 spec.txt】
+{spec_text}
+"""
+    else:
+        spec_section = ""
 
     system_prompt = """あなたは議事録係です。以下のJSON形式で決定事項だけを抽出してください。
 出力は必ずJSON配列のみにしてください。前置きや説明文、コードブロックの記号は一切含めないでください。
@@ -38,8 +47,8 @@ def extract_decisions(department_id, task_text, full_transcript):
 
     user_prompt = f"""部署: {department_id}
 タスク: {task_text}
-
-以下は部署内での議論の全文です。ここから確定した決定事項だけを抽出してください。
+{spec_section}
+以下は部署内での議論ログ(chat)です。ここから確定した決定事項だけを抽出してください。
 まだ議論中で確定していない内容は含めないでください。
 
 {transcript_text}"""

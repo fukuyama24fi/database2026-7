@@ -129,8 +129,12 @@ def manager_review_deliverables(
 {deliverables_text}
 
 暫定D-listと制作物がタスクに適合しているか、自部署ドメインの観点で検収してください。
+制作物(spec.txt)が一般論のみで、具体項目名・API・コード片など実装可能な記述が無い場合は needs_revision としてください。
 差し戻す場合は revision_report に、メンバーが修正できる具体的指摘(anchor内のみ)を書いてください。
+"""
+    #変更: 部長検収で一般論だけのspecを差し戻す条件をuser_promptに追加(上記)
 
+    user_prompt = user_prompt + """
 出力は必ず以下のJSON形式のみにしてください。前置きや説明文は一切含めないでください。
 
 {{

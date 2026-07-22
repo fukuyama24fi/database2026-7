@@ -1,9 +1,7 @@
-﻿from db.read import get_department_members_by_skill, get_persona, get_recent_messages
-from db.write import add_message_to_room, assign_member_to_room
-from llm.ask_llm import ask_llm
+﻿from db.read import get_department_members_by_skill, get_persona
+from db.write import assign_member_to_room
+from meeting.member_turn import run_member_turn
 from memory.make_summary import make_turn_summary
-from prompts.build_system_prompt import build_system_prompt
-from prompts.build_user_prompt import build_user_prompt
 from roles.pm import pm_check_agreement, pm_decide_scouting
 
 
@@ -45,21 +43,15 @@ def department_discussion_loop(
         turn_start_index = len(full_transcript)  #新規: このターンの発言開始位置を記録
 
         for member in members:
-            persona = get_persona(member["agent_persona_id"])
-            if persona is None:
+            if get_persona(member["agent_persona_id"]) is None:
                 print(f"personaが見つかりません: {member['display_name']}")
                 continue
- 
-            system_prompt = build_system_prompt(member["display_name"], persona)
-            # 直近の会話をDBから毎回取り直す。前の発言者の発言も踏まえて話すため
-            recent_messages = get_recent_messages(room_id)
-            user_prompt = build_user_prompt(task_text, recent_messages, reference_context)
- 
-            reply = ask_llm(system_prompt, user_prompt)
-            print(f"[ターン{turn_number}] {member['display_name']}: {reply}")
- 
-            full_transcript.append({"speaker": member["display_name"], "message": reply})
-            add_message_to_room(room_id, member["display_name"], reply)
+
+            #変更: JSON(chat+artifact_update)方式で1人分の発言とspec.txt更新を行う
+            chat = run_member_turn(room_id, member, task_text, reference_context)
+            print(f"[ターン{turn_number}] {member['display_name']}: {chat}")
+
+            full_transcript.append({"speaker": member["display_name"], "message": chat})
 
         this_turn_messages = full_transcript[turn_start_index:]  #新規: このターン分の発言だけ切り出す
         consensus_reached = False
