@@ -1,4 +1,4 @@
-# 英語名
+#英語名
 first_names = [
     "James",
     "John",

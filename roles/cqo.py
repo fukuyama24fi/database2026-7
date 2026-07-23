@@ -5,13 +5,13 @@ from db.read import get_persona
 from llm.ask_llm import ask_llm
 from prompts.build_system_prompt import build_system_prompt
 from prompts.json_format_rules import CQO_JSON_EXAMPLE, JSON_FORMAT_RULES
-from utils.parse_json import clean_json_response, parse_llm_json
+from utils.parse_json import parse_llm_json
 
 CQO_PERSONA_ID = "persona_exec_cqo"
 
 
 def flag_suspicious_results(results):
-    #変更: 部長2回差し戻し後の強制承認(forced_approved)を機械的に「怪しい」としてマーク
+    #部長2回差し戻し後の強制承認(forced_approved)を機械的に「怪しい」としてマーク
     flagged = []
     for result in results:
         is_suspicious = result.get("status") == "forced_approved" or bool(
@@ -23,15 +23,15 @@ def flag_suspicious_results(results):
     return flagged
 
 
-def build_d_list_overview(results):
-    #変更: CQO向けに各部署D-listのsummaryだけを渡す(プロンプト爆発対策)
+def build_decision_summary(results):
+    #CQO向けに各部署D-listのsummaryだけを渡す(プロンプト爆発対策)
     lines = []
     for result in results:
         dept = result["department_id"]
-        task = result["sub_task_text"]
+        task = result.get("dept_task", result.get("sub_task_text", ""))
         suspicious = " [怪しい]" if result.get("is_suspicious") else ""
         lines.append(f"## {dept}{suspicious}")
-        lines.append(f"room_id: {result['room_id']}")  #変更: CQO向けroom_id明示
+        lines.append(f"room_id: {result['room_id']}")  #CQO向けroom_id明示
         lines.append(f"タスク: {task}")
         lines.append(f"ルーム要約: {result.get('short_summary', '(なし)')}")
         decisions = result.get("decisions") or []
@@ -50,7 +50,7 @@ def build_d_list_overview(results):
 
 
 def build_suspicious_detail_section(flagged_results):
-    #変更: 怪しい部署だけ詳細(D-list rationale + 懸念レポート)を追加
+    #怪しい部署だけ詳細(D-list rationale + 懸念レポート)を追加
     if not flagged_results:
         return ""
     parts = ["【怪しい部署の詳細(重点監査)】"]
@@ -62,14 +62,14 @@ def build_suspicious_detail_section(flagged_results):
             parts.append(
                 f"- {d.get('summary', '')} (根拠: {d.get('rationale', '')})"
             )
-        deliverables = result.get("deliverables_text")
-        if deliverables:
-            parts.append(f"制作物抜粋:\n{deliverables[:1500]}")
+        outputs = result.get("outputs_text", result.get("deliverables_text"))
+        if outputs:
+            parts.append(f"outputs抜粋:\n{outputs[:1500]}")
     return "\n".join(parts)
 
 
 def build_room_id_reference(results):
-    #変更: CQOがroom_id/decision_idを取り違えないよう参照表を渡す
+    #CQOがroom_id/decision_idを取り違えないよう参照表を渡す(なぜかごちゃまぜにされる)
     lines = ["【room_id / decision_id 参照表(必ずこの値を使う)】"]
     for result in results:
         lines.append(f"room_id={result['room_id']} department={result['department_id']}")
@@ -82,8 +82,8 @@ def build_room_id_reference(results):
 
 
 def normalize_cqo_conflicts(conflicts, results):
-    #変更: LLMが誤ったroom_id/decision_idを返した場合に機械的に補正する
-    valid_rooms = {r["room_id"]: r for r in results}
+    #LLMが誤ったroom_id/decision_idを返した場合に機械的に補正する
+    room_map = {r["room_id"]: r for r in results}
     decisions_by_room = {
         r["room_id"]: {d["decision_id"]: d for d in (r.get("decisions") or []) if d.get("decision_id")}
         for r in results
@@ -96,15 +96,15 @@ def normalize_cqo_conflicts(conflicts, results):
             room_id = item.get("room_id", "")
             decision_id = item.get("decision_id", "")
 
-            if room_id.startswith("dec_") or room_id not in valid_rooms:
-                for rid in valid_rooms:
+            if room_id.startswith("dec_") or room_id not in room_map:
+                for rid in room_map:
                     if rid in str(decision_id) or rid in str(room_id):
                         room_id = rid
                         break
 
-            if room_id not in valid_rooms:
+            if room_id not in room_map:
                 dept_ids = conflict.get("department_ids") or []
-                for rid, res in valid_rooms.items():
+                for rid, res in room_map.items():
                     if res["department_id"] in dept_ids:
                         room_id = rid
                         break
@@ -119,10 +119,10 @@ def normalize_cqo_conflicts(conflicts, results):
                 if decision_id not in room_decisions and room_decisions:
                     decision_id = next(iter(room_decisions.keys()))
 
-            if room_id in valid_rooms and decision_id:
+            if room_id in room_map and decision_id:
                 fixed_affected.append({"room_id": room_id, "decision_id": decision_id})
 
-        room_ids = [r for r in (conflict.get("room_ids") or []) if r in valid_rooms]
+        room_ids = [r for r in (conflict.get("room_ids") or []) if r in room_map]
         if not room_ids:
             room_ids = list({a["room_id"] for a in fixed_affected if a.get("room_id")})
 
@@ -133,7 +133,7 @@ def normalize_cqo_conflicts(conflicts, results):
 
 
 def infer_conflicts_from_text(reason, results, raw_text=""):
-    #変更: CQOがconflicts配列を出さずreasonに長文を書いた場合、decision_id等から機械推定
+    #CQOがconflicts配列を出さずreasonに長文を書いた場合、decision_id等から機械推定する
     combined = f"{reason}\n{raw_text}"
     decision_ids = list(dict.fromkeys(re.findall(r"dec_[a-zA-Z0-9_]+", combined)))
     if not decision_ids:
@@ -182,6 +182,7 @@ def infer_conflicts_from_text(reason, results, raw_text=""):
 
 
 def cqo_check_cross_department(task_text, results):
+    #CQOが全部署のD-list/outputsを横断して監査し、矛盾(conflicts)を検出する
     """CQOが全部署のD-listを横断監査し、部署間衝突・結合テスト整合性を確認する
 
     戻り値: {
@@ -199,7 +200,7 @@ def cqo_check_cross_department(task_text, results):
         }
 
     flagged = flag_suspicious_results(results)
-    overview = build_d_list_overview(results)
+    overview = build_decision_summary(results)
     detail = build_suspicious_detail_section(flagged)
     room_ref = build_room_id_reference(results)
 
@@ -262,13 +263,13 @@ affected_decisions: 矛盾に関わる決定を room_id+decision_id(参照表)�
             "verdict": "needs_rollback",
             "reason": "解析失敗",
             "conflicts": [],
-            "parse_failed": True,  #変更: 解析失敗フラグ(run_projectが誤って整合性OKとしない)
+            "parse_failed": True,  #解析失敗フラグ(run_projectが誤って整合性OKとしない)(こうしないと喋れないLLMは放置されたままカオスになるだけ)
         }
 
     if "conflicts" not in result:
         result["conflicts"] = []
 
-    #変更: needs_rollbackなのにconflicts空=LLMがreasonに長文を書いたケースを機械推定
+    #needs_rollbackなのにconflicts空=LLMがreasonに長文を書いたケースを機械推定
     if result.get("verdict") == "needs_rollback" and not result.get("conflicts"):
         inferred = infer_conflicts_from_text(result.get("reason", ""), results, raw_text=raw)
         if inferred:
@@ -292,20 +293,21 @@ affected_decisions: 矛盾に関わる決定を room_id+decision_id(参照表)�
 
 
 def cqo_check_managers_agreement(task_text, conflict, meeting_transcript, manager_contexts):
+    #部長討論ログを読み、衝突について合意できたかCQOが判定する
     """CQOが部長討論の合意形成をPMのように確認する
 
-    戻り値: {consensus_reached: bool, reason: str}
+    戻り値: {agreed: bool, reason: str}
     """
     persona = get_persona(CQO_PERSONA_ID)
     if persona is None:
-        return {"consensus_reached": False, "reason": "CQO persona未設定"}
+        return {"agreed": False, "reason": "CQO persona未設定"}
 
     system_prompt = build_system_prompt("CQO", persona)
     history = "\n".join(
         f"{m['speaker']}: {m['message']}" for m in meeting_transcript
     ) or "(まだ発言なし)"
     managers_overview = "\n".join(
-        f"- {c['department_id']}: {c['sub_task_text']}" for c in manager_contexts
+        f"- {c['department_id']}: {c.get('dept_task', c.get('sub_task_text', ''))}" for c in manager_contexts
     )
 
     user_prompt = f"""プロジェクト要件: {task_text}
@@ -325,61 +327,17 @@ def cqo_check_managers_agreement(task_text, conflict, meeting_transcript, manage
 
 JSONのみ:
 {{
-  "consensus_reached": true または false,
+  "agreed": true または false,
   "reason": "合意/未合意の理由(簡潔に)"
 }}"""
 
     raw = ask_llm(system_prompt, user_prompt)
     parsed = parse_llm_json(raw)
     if parsed is None:
-        return {"consensus_reached": False, "reason": "CQO合意確認の解析失敗"}
+        return {"agreed": False, "reason": "CQO合意確認の解析失敗"}
+    if "agreed" not in parsed and "consensus_reached" in parsed:
+        parsed["agreed"] = parsed.pop("consensus_reached")
     return {
-        "consensus_reached": bool(parsed.get("consensus_reached")),
+        "agreed": bool(parsed.get("agreed")),
         "reason": str(parsed.get("reason", "")).strip(),
     }
-
-
-def cqo_check_decisions(
-    department_id,
-    task_text,
-    decisions,
-    deliverables_text=None,
-    concerns_report=None,
-    forced_approval=False,
-):
-    """単部署監査(後方互換)。横断監査は cqo_check_cross_department を使う。"""
-    persona = get_persona(CQO_PERSONA_ID)
-    if persona is None:
-        return {"verdict": "needs_revision", "reason": "CQO persona未設定"}
-
-    system_prompt = build_system_prompt("CQO", persona)
-    if decisions:
-        decisions_text = "\n".join(
-            f"- {d.get('summary', '')}(根拠: {d.get('rationale', '')})" for d in decisions
-        )
-    else:
-        decisions_text = "(決定事項はありません)"
-
-    concerns_section = ""
-    if forced_approval:
-        concerns_section = f"""
-【部長強制承認・怪しい】
-{concerns_report or "(懸念レポートなし)"}
-"""
-
-    user_prompt = f"""{department_id}部署のD-listを監査してください。
-{concerns_section}
-タスク: {task_text}
-決定事項:
-{decisions_text}
-制作物:
-{deliverables_text or "（未作成）"}
-
-JSONのみ: {{"verdict":"approved|needs_revision","reason":"..."}}"""
-
-    raw = ask_llm(system_prompt, user_prompt)
-    cleaned = clean_json_response(raw)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        return {"verdict": "needs_revision", "reason": "解析失敗"}

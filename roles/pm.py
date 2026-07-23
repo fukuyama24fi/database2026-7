@@ -3,11 +3,11 @@ from llm.ask_llm import ask_llm
 from prompts.build_system_prompt import build_system_prompt
 from utils.parse_json import parse_llm_json
 
-# PMの役割:議論の進行と合意形成の判断
+#PMの役割。議論の進行と合意形成の判断を担当する
 
 
 def _format_past_turn_summaries(turn_summaries):
-    #新規: PM判定用に、過去ターンの要約をプロンプト向けテキストに整形する
+    #PMの合意判定・スカウト判定用。過去ターンの要約をプロンプト文字列にする
     if turn_summaries:
         return "\n".join(
             f"ターン{s['turn_number']}: {s['summary']}" for s in turn_summaries
@@ -16,7 +16,7 @@ def _format_past_turn_summaries(turn_summaries):
 
 
 def _format_current_turn_messages(current_turn_messages):
-    #新規: PM判定用に、直近ターンの発言全文をプロンプト向けテキストに整形する
+    #PMの合意判定・スカウト判定用。直近ターンの発言全文をプロンプト文字列にする
     return "\n".join(
         f"{m['speaker']}: {m['message']}" for m in current_turn_messages
     )
@@ -26,15 +26,15 @@ def pm_check_agreement(department_id, task_text, turn_summaries, current_turn_me
     """PMが現時点の議論を読み、D-list化できる程度に合意形成されたか判断する
     (PMのjudgment_anchor:「D-list昇格の基準を満たしているか」を使う)
 
-    戻り値: {"consensus_reached": True/False, "reason": "..."}
+    戻り値: {"agreed": True/False, "reason": "..."}
     """
     leader = get_department_leader(department_id)
     if leader is None:
-        return {"consensus_reached": False, "reason": "PM情報が見つかりません"}
+        return {"agreed": False, "reason": "PM情報が見つかりません"}
 
     persona = get_persona(leader["agent_persona_id_pm"])
     if persona is None:
-        return {"consensus_reached": False, "reason": "PMのpersonaが見つかりません"}
+        return {"agreed": False, "reason": "PMのpersonaが見つかりません"}
 
     system_prompt = build_system_prompt(leader["pm_name"], persona)
 
@@ -56,7 +56,7 @@ def pm_check_agreement(department_id, task_text, turn_summaries, current_turn_me
 出力は必ず以下のJSON形式のみにしてください。前置きや説明文は一切含めないでください。
 
 {{
-  "consensus_reached": trueまたはfalse,
+  "agreed": trueまたはfalse,
   "reason": "判断理由(簡潔に・1行のみ・改行不可)"
 }}"""
 
@@ -66,7 +66,10 @@ def pm_check_agreement(department_id, task_text, turn_summaries, current_turn_me
     if result is None:
         print("PMの合意判定がJSONとして解析できませんでした:")
         print(raw)
-        result = {"consensus_reached": False, "reason": "解析失敗のため議論を継続します"}
+        result = {"agreed": False, "reason": "解析失敗のため議論を継続します"}
+
+    if "agreed" not in result and "consensus_reached" in result:
+        result["agreed"] = result.pop("consensus_reached")
 
     return result
 
@@ -80,7 +83,7 @@ def pm_decide_scouting(
     current_team_size,
     parse_error_count=0,
 ):
-    #変更: スキル不足・議論停滞のみでスカウト判断。構文解析エラーは別問題
+    #スキル不足・議論停滞のみでスカウト判断。構文解析エラーは別問題
     if parse_error_count > 0:
         return {
             "needs_scout": False,
@@ -129,7 +132,7 @@ def pm_decide_scouting(
 重要: 以下はスカウト理由にしないでください。
 - メンバー出力のJSON/構文解析エラー(Parse Error)
 - 「出力を解析できませんでした」等のフォーマット失敗
-- spec.txt更新の形式崩れ
+- design.txt更新の形式崩れ
 
 該当しない場合は needs_scout を false にしてください。
 
@@ -156,7 +159,7 @@ def pm_decide_scouting(
     if "needed_skills" not in result:
         result["needed_skills"] = []
 
-    #変更: PMが誤って構文エラーを停滞と判断してもPython側でスカウトをブロック
+    #PMが誤って構文エラーを停滞と判断してもPython側でスカウトをブロック
     reason_text = str(result.get("reason", ""))
     parse_error_keywords = ("解析", "JSON", "構文", "フォーマット", "形式", "parse")
     if result.get("needs_scout") and any(k.lower() in reason_text.lower() for k in parse_error_keywords):

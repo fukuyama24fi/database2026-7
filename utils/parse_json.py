@@ -2,14 +2,14 @@ import json
 import re
 
 try:
-    import dirtyjson  #変更: クォート忘れ・末尾カンマ等の壊れたJSONを寛容にパース
+    import dirtyjson  #クォート忘れ・末尾カンマ等の壊れたJSONを寛容にパース
 except ImportError:
     dirtyjson = None
 
-CHAT_MAX_CHARS = 200  #変更: メンバー進行用chatの最大文字数
+CHAT_MAX_CHARS = 200  #メンバー進行用chatの最大文字数
 
 JSON_STRING_REPAIR_KEYS = (
-    "artifact_update",
+    "design_update",
     "chat",
     "reason",
     "rationale",
@@ -25,7 +25,7 @@ def clean_json_response(raw):
     先頭・末尾の```を取り除いてから渡せるようにする(memory.py/cto.py/cqo.py共通で使う)
     """
     cleaned = raw.strip()
-    #変更: 文頭・文末の不要なバックスラッシュを除去
+    #文頭・文末の不要なバックスラッシュを除去
     cleaned = cleaned.strip("\\")
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
@@ -34,7 +34,7 @@ def clean_json_response(raw):
 
 
 def extract_json_object(raw):
-    #変更: 前置き文混じりの出力から最初のJSONオブジェクト{...}だけを抜き出す
+    #前置き文混じりの出力から最初のJSONオブジェクト{...}だけを抜き出す
     text = clean_json_response(raw)
     start = text.find("{")
     if start < 0:
@@ -64,7 +64,7 @@ def extract_json_object(raw):
 
 
 def extract_json_array_after_key(text, key):
-    #変更: conflicts等の配列を括弧バランスで抽出(非貪欲regexの取りこぼし防止)
+    #conflicts等の配列を括弧バランスで抽出(非貪欲regexの取りこぼし防止)
     marker = f'"{key}"'
     idx = text.find(marker)
     if idx < 0:
@@ -100,7 +100,7 @@ def extract_json_array_after_key(text, key):
 
 
 def extract_json_array_root(raw):
-    #変更: 前置き混じり出力から最初のJSON配列[...]だけを抜き出す(D-list extract用)
+    #前置き混じり出力から最初のJSON配列[...]だけを抜き出す(find_decisions_from_log用)
     text = clean_json_response(raw)
     start = text.find("[")
     if start < 0:
@@ -143,7 +143,7 @@ def _try_json_loads_any(text):
 
 
 def parse_llm_json_array(raw):
-    #変更: D-list extract等のJSON配列出力を寛容にパース(rationale内改行対応)
+    #find_decisions_from_log等のJSON配列出力を寛容にパース(rationale内改行対応)
     candidates = []
     preprocessed = preprocess_llm_json(raw)
     if preprocessed:
@@ -181,8 +181,16 @@ def parse_llm_json_array(raw):
     return []
 
 
-def sanitize_markdown_line(line):
-    #変更: JSON文字列内のMarkdown行頭記号(# * - 番号付き)を除去
+def remove_markdown(text):
+    #文字列値内Markdownをプレーン文本に整形
+    if not text:
+        return text
+    lines = [_remove_markdown_line(line) for line in text.split("\n")]
+    return "\n".join(lines).strip()
+
+
+def _remove_markdown_line(line):
+    #JSON文字列内のMarkdown行頭記号(# * - 番号付き)を除去。ゴキブリ並みの生命力だ
     line = line.rstrip()
     line = re.sub(r"^#{1,6}\s*", "", line)
     line = re.sub(r"^[\*\-\+]\s+", "", line)
@@ -193,12 +201,36 @@ def sanitize_markdown_line(line):
     return line
 
 
-def sanitize_markdown_in_plain_text(text):
-    #変更: 文字列値内Markdownをプレーン文本に整形
-    if not text:
-        return text
-    lines = [sanitize_markdown_line(line) for line in text.split("\n")]
-    return "\n".join(lines).strip()
+def _regex_fallback_member_response(cleaned):
+    data = {}
+    chat_match = re.search(
+        r'"chat"\s*:\s*"(.*?)"\s*,\s*"(?:artifact_update|design_update)"',
+        cleaned,
+        re.DOTALL,
+    )
+    if chat_match:
+        data["chat"] = remove_markdown(
+            chat_match.group(1).replace("\\n", " ").replace("\n", " ")
+        )
+
+    design_match = re.search(
+        r'"(?:artifact_update|design_update)"\s*:\s*"(.*)"\s*\}\s*$',
+        cleaned,
+        re.DOTALL,
+    )
+    if not design_match:
+        design_match = re.search(
+            r'"(?:artifact_update|design_update)"\s*:\s*"(.*)',
+            cleaned,
+            re.DOTALL,
+        )
+    if design_match:
+        raw_design = design_match.group(1)
+        raw_design = re.sub(r'"\s*\}\s*$', "", raw_design, flags=re.DOTALL)
+        data["design_update"] = remove_markdown(
+            raw_design.replace("\\n", "\n")
+        )
+    return data
 
 
 def _json_escape_string_content(text):
@@ -206,7 +238,7 @@ def _json_escape_string_content(text):
 
 
 def repair_json_string_field(text, key):
-    #変更: 指定キーの文字列値で生改行・未エスケープ引用符を修復
+    #指定キーの文字列値で生改行・未エスケープ引用符を修復
     pattern = re.compile(rf'"{re.escape(key)}"\s*:\s*"', re.DOTALL)
     match = pattern.search(text)
     if not match:
@@ -249,13 +281,13 @@ def repair_json_string_field(text, key):
             raw_value = raw_value[:-1]
         end_idx = text.rfind("}")
 
-    cleaned_value = sanitize_markdown_in_plain_text(raw_value)
+    cleaned_value = remove_markdown(raw_value)
     escaped_value = _json_escape_string_content(cleaned_value)
     return text[: start_quote + 1] + escaped_value + text[end_idx:]
 
 
 def normalize_json_text(text):
-    #変更: 日本語引用符やreasonフィールドの不正引用をASCII JSON向けに正規化
+    #日本語引用符やreasonフィールドの不正引用をASCII JSON向けに正規化
     normalized = text
     normalized = re.sub(r":\s*「([^」]*)」", r': "\1"', normalized)
     normalized = re.sub(r":\s*『([^』]*)』", r': "\1"', normalized)
@@ -267,7 +299,7 @@ def normalize_json_text(text):
 
 
 def preprocess_llm_json(raw):
-    #変更: LLM出力JSONのプリプロセッサ(Markdown除去・文字列修復・引用符正規化)
+    #LLM出力JSONのプリプロセッサ(Markdown除去・文字列修復・引用符正規化)
     text = extract_json_object(raw) or clean_json_response(raw)
     if not text:
         return ""
@@ -307,16 +339,20 @@ def parse_llm_json(raw):
         for text in (candidate, normalize_json_text(candidate)):
             data = _try_json_loads(text)
             if data is not None:
+                if "consensus_reached" in data and "agreed" not in data:
+                    data["agreed"] = data.pop("consensus_reached")
+                if "needs_renegotiation" in data and "needs_talk_redo" not in data:
+                    data["needs_talk_redo"] = data.pop("needs_renegotiation")
                 return data
 
     cleaned = normalize_json_text(preprocess_llm_json(raw) or extract_json_object(raw) or clean_json_response(raw))
     result = {}
 
-    consensus_match = re.search(
-        r'"consensus_reached"\s*:\s*(true|false)', cleaned, re.IGNORECASE
+    agreed_match = re.search(
+        r'"(?:consensus_reached|agreed)"\s*:\s*(true|false)', cleaned, re.IGNORECASE
     )
-    if consensus_match:
-        result["consensus_reached"] = consensus_match.group(1).lower() == "true"
+    if agreed_match:
+        result["agreed"] = agreed_match.group(1).lower() == "true"
 
     verdict_match = re.search(
         r'"verdict"\s*:\s*"(approved|needs_revision|needs_rollback|agree|disagree)"',
@@ -334,7 +370,7 @@ def parse_llm_json(raw):
 
     reason_match = re.search(r'"reason"\s*:\s*"((?:[^"\\]|\\.)*)"', cleaned)
     if reason_match:
-        result["reason"] = sanitize_markdown_in_plain_text(
+        result["reason"] = remove_markdown(
             reason_match.group(1).replace("\\n", " ")
         ).strip()
 
@@ -352,40 +388,8 @@ def parse_llm_json(raw):
     return None
 
 
-def _regex_fallback_member_response(cleaned):
-    data = {}
-    chat_match = re.search(
-        r'"chat"\s*:\s*"(.*?)"\s*,\s*"artifact_update"',
-        cleaned,
-        re.DOTALL,
-    )
-    if chat_match:
-        data["chat"] = sanitize_markdown_in_plain_text(
-            chat_match.group(1).replace("\\n", " ").replace("\n", " ")
-        )
-
-    artifact_match = re.search(
-        r'"artifact_update"\s*:\s*"(.*)"\s*\}\s*$',
-        cleaned,
-        re.DOTALL,
-    )
-    if not artifact_match:
-        artifact_match = re.search(
-            r'"artifact_update"\s*:\s*"(.*)',
-            cleaned,
-            re.DOTALL,
-        )
-    if artifact_match:
-        raw_artifact = artifact_match.group(1)
-        raw_artifact = re.sub(r'"\s*\}\s*$', "", raw_artifact, flags=re.DOTALL)
-        data["artifact_update"] = sanitize_markdown_in_plain_text(
-            raw_artifact.replace("\\n", "\n")
-        )
-    return data
-
-
-def parse_member_response(raw):
-    """メンバー出力(JSON: chat + artifact_update)をパース。parse_errorで構文失敗を返す"""
+def read_member_json(raw):
+    """メンバー出力(JSON: chat + design_update)をパース。parse_errorで構文失敗を返す"""
     parse_error = False
     data = None
 
@@ -407,6 +411,10 @@ def parse_member_response(raw):
             loaded = _try_json_loads(text)
             if loaded is not None:
                 data = loaded
+                if data.get("artifact_update") and not data.get("design_update"):
+                    data["design_update"] = data.pop("artifact_update")
+                if data.get("consensus_reached") is not None and "agreed" not in data:
+                    data["agreed"] = data.pop("consensus_reached")
                 break
         if data is not None:
             break
@@ -415,13 +423,13 @@ def parse_member_response(raw):
         parse_error = True
         cleaned = preprocess_llm_json(raw) or clean_json_response(raw)
         data = _regex_fallback_member_response(cleaned)
-        if not data.get("chat") and not data.get("artifact_update"):
+        if not data.get("chat") and not data.get("design_update"):
             return None
 
     chat = data.get("chat", "")
     if isinstance(chat, list):
         chat = " ".join(str(item) for item in chat)
-    chat = sanitize_markdown_in_plain_text(str(chat).replace("\n", " ")).strip()
+    chat = remove_markdown(str(chat).replace("\n", " ")).strip()
     if len(chat) > CHAT_MAX_CHARS:
         print(
             f"変更: chatが{CHAT_MAX_CHARS}字を超えたため切り詰めます"
@@ -429,21 +437,22 @@ def parse_member_response(raw):
         )
         chat = chat[:CHAT_MAX_CHARS]
 
-    artifact = data.get("artifact_update", "")
-    if isinstance(artifact, list):
-        artifact = "\n".join(str(item) for item in artifact)
-    elif artifact is None:
-        artifact = ""
+    design = data.get("design_update", "")
+    if isinstance(design, list):
+        design = "\n".join(str(item) for item in design)
+    elif design is None:
+        design = ""
     else:
-        artifact = sanitize_markdown_in_plain_text(str(artifact))
+        design = remove_markdown(str(design))
 
-    if not chat and not artifact:
+    if not chat and not design:
         return None
 
-    return {"chat": chat, "artifact_update": artifact, "parse_error": parse_error}
+    return {"chat": chat, "design_update": design, "parse_error": parse_error}
 
 
 def is_parser_error_message(message):
+    #メンバー発言がJSON解析失敗メッセージかどうかを判定する(PMスカウト判定の材料)
     if not message:
         return False
     markers = (

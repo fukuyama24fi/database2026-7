@@ -1,5 +1,5 @@
-﻿#上流会議
-#CTOと選ばれた各部長が、それぞれの担当領域について話し合う
+﻿#上流会議。CTOと選ばれた各部長が担当領域について話し合う
+#CTOの部署配分に部長が合意するか確認し、反対があればCTOに修正させる
 
 from roles.cto import cto_fix_assignments
 from roles.manager import ask_managers_agreement

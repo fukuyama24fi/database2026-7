@@ -1,4 +1,5 @@
-CHAT_MAX_CHARS = 200  #変更: メンバー進行用chatの最大文字数
+#build_user_prompt内でchat最大文字数として参照(parse_json側にも同名定数あり)
+CHAT_MAX_CHARS = 200
 
 from prompts.json_format_rules import JSON_FORMAT_RULES, MEMBER_JSON_EXAMPLE
 
@@ -7,13 +8,13 @@ def build_user_prompt(
     task_text,
     recent_messages,
     reference_context=None,
-    current_spec="",
+    current_design="",
     team_memo="",
     expects_code=True,
     member_role="未割当",
-    peer_context="",
+    other_dept_info="",
 ):
-    """直近の会話履歴(短期記憶)を踏まえたuser_promptを組み立てる"""
+    #メンバーLLM向けuser_prompt(タスク・履歴・design.txt・差し戻し指摘をまとめる)
     if recent_messages:
         history_text = "\n".join(
             f"{m['speaker']}: {m['message']}" for m in recent_messages
@@ -21,7 +22,6 @@ def build_user_prompt(
     else:
         history_text = "(まだ発言はありません)"
 
-    #変更: 部長差し戻し時にrevision_reportをメンバーへ渡す
     reference_section = ""
     if reference_context:
         reference_section = f"""
@@ -29,7 +29,6 @@ def build_user_prompt(
 {reference_context}
 """
 
-    #変更: 参加メンバーのスキル・性格一覧
     if team_memo:
         team_section = f"""
 【チームメンバー(team_memo.txt)】
@@ -38,57 +37,54 @@ def build_user_prompt(
     else:
         team_section = ""
 
-    #変更: 先行部署のspec/D-list概要(後続部署が参照)
-    if peer_context:
+    if other_dept_info:
         peer_section = f"""
-{peer_context}
+{other_dept_info}
 """
     else:
         peer_section = ""
 
-    #変更: 全員共有の成果物spec.txtの現状を渡す(議論の本体はここに書く)
-    if current_spec:
-        spec_section = f"""
-【現在の成果物 spec.txt】
-{current_spec}
+    if current_design:
+        design_section = f"""
+【現在の成果物 design.txt】
+{current_design}
 """
     else:
-        spec_section = """
-【現在の成果物 spec.txt】
+        design_section = """
+【現在の成果物 design.txt】
 (まだ内容はありません)
 """
 
     if expects_code:
-        artifact_guide = """- 次のような「実装可能な具体情報」を優先して書く:
+        design_guide = """- 次のような「実装可能な具体情報」を優先して書く:
   * 画面/コンポーネント名、入力項目(名前・型・必須・placeholder・エラー文言)
   * API/データ構造(JSONキー名)、状態管理の変数名、画面遷移条件
   * 書ける場合はコード片(HTML/CSS/TSX/Python等)"""
     else:
-        artifact_guide = """- 本タスクは設計・デザイン担当のため、コードは不要。次のような「具体的な設計仕様」を書く:
+        design_guide = """- 本タスクは設計・デザイン担当のため、コードは不要。次のような「具体的な設計仕様」を書く:
   * 画面構成・ワイヤー・情報設計・コンポーネント名・レイアウト(配置・サイズ)
   * 色・ typography・状態(通常/エラー/ disabled)・遷移条件
   * 入力項目定義(名前・必須・バリデーション・エラー文言)"""
-    #変更: タスク種別(設計/実装)でartifact_updateの指示を分ける
 
     return f"""タスク: {task_text}
 {team_section}
 {peer_section}
-{spec_section}
+{design_section}
 これまでの会話(直近):
 {history_text}
 {reference_section}
 あなたは次の発言者です。
 あなたの担当役割(PM割当): {member_role}
-- 自分の担当役割の範囲のみ spec.txt を更新すること。他メンバーの担当領域に書かない。
+- 自分の担当役割の範囲のみ design.txt を更新すること。他メンバーの担当領域に書かない。
 
-【成果物の書き方(spec.txt / artifact_update)】
-- 議論の本体は artifact_update に書く。chat は「何を更新したか」の報告のみ(最大{CHAT_MAX_CHARS}字)
-- artifact_update は spec.txt の最新版全文(1つの統一フォーマット)。Markdown見出し形式を推奨
-- 「# 追記・修正」など履歴セクションは書かない(旧版はシステムが spec_history.txt に自動保存)
-- 既存 spec.txt をベースに、自分の担当範囲を反映した完全版を毎回出力すること
+【成果物の書き方(design.txt / design_update)】
+- 議論の本体は design_update に書く。chat は「何を更新したか」の報告のみ(最大{CHAT_MAX_CHARS}字)
+- design_update は design.txt の最新版全文(1つの統一フォーマット)。Markdown見出し形式を推奨
+- 「# 追記・修正」など履歴セクションは書かない(旧版はシステムが design_history.txt に自動保存)
+- 既存 design.txt をベースに、自分の担当範囲を反映した完全版を毎回出力すること
 - 毎ターン、1つ以上の具体項目を追加・修正すること(空文字 "" は不可)
-{artifact_guide}
-- 次のような「一般論だけ」は chat にも spec にも書かない:
+{design_guide}
+- 次のような「一般論だけ」は chat にも design にも書かない:
   * 「UXを向上させる」「ユーザー目線が重要」など中身のない抽象論
   * タスクに紐づかない教科書的説明
 
@@ -96,9 +92,9 @@ def build_user_prompt(
 {JSON_FORMAT_RULES}
 {MEMBER_JSON_EXAMPLE}
 - chat: 最大{CHAT_MAX_CHARS}字・1行のみ・改行不可
-- artifact_update: spec.txt の新しい全文(JSON文字列内で改行可。値はすべて "" で囲む)
+- design_update: design.txt の新しい全文(JSON文字列内で改行可。値はすべて "" で囲む)
 
 {{
   "chat": "...",
-  "artifact_update": "..."
+  "design_update": "..."
 }}"""

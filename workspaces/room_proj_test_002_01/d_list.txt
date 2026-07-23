@@ -1,0 +1,24 @@
+[1] id=dec_room_proj_test_002_01_001 turn=3 type=auth_flow_spec
+  summary: ログインAPI (`/api/auth/login`)とトークンリフレッシュAPI (`/api/auth/refresh`)のAPI設計を決定。入力スキーマ、レスポンススキーマ、エラーハンドリングロジック（リトライ制限、トークン失効チェック、クライアント側エラーメッセージ）を具体化。
+  rationale: Barbara ClarkとJennifer Wilsonの交互の提案により、API設計とDB構造が統合的に確定。ユーザー認証フローのエンドポイント、入出力スキーマ、トークン管理ロジック（JWT生成・有効期限、リトライ制限）が明文化された。非同期エラーハンドリング（リトライロジック、自動リフレッシュ条件）もAPI仕様に反映された。
+  confidence: 1.0
+
+[2] id=dec_room_proj_test_002_01_003 turn=3 type=error_handling_spec
+  summary: ログインAPIのエラーハンドリング仕様を決定。エラーコード（`INVALID_CREDENTIALS`, `TOKEN_EXPIRED`, `MAX_RETRIES_EXCEEDED`）、エラーメッセージ、リトライロジック（API呼び出し・タイムアウト・リトライ遅延）を定義。
+  rationale: Jennifer Wilsonが反復提案し、全員で合意された。エラーハンドリングは`design.txt`の`error_handling`セクションと一致し、クライアント側のリトライ条件（`retry_allowed`フラグ）を明文化。
+  confidence: 1.0
+
+[3] id=dec_room_proj_test_002_01_005 turn=3 type=db_structure_commit
+  summary: ユーザー認証用DBテーブル構成を決定。`users`テーブル（ユーザーID、メールアドレス、ハッシュ化パスワード）と`auth_tokens`テーブル（トークンID、トークン値、有効期限、リトライ回数）を追加。
+  rationale: Barbara Clarkの提案により、ユーザー認証ロジックとトークン管理のDB構造が具体化された。`auth_tokens`テーブルはトークン失効チェックとリトライ回数管理に必要なフィールド（`token_value`, `expires_at`, `retry_count`）を持つように設計された。
+  confidence: 1.0
+
+[4] id=dec_room_proj_test_002_01_006 turn=3 type=auth_logic_impl
+  summary: ログイン認証ロジックをPythonコードスニペットとして実装。ユーザー検索、パスワードバリデーション、トークン生成、DB更新（トークン失効チェック・リトライ回数管理）を統合。
+  rationale: Barbara Clarkのコードスニペット提案が全員で承認された。ロジックは`design.txt`のAPI仕様とDB構造を忠実に反映し、トークン失効時のリトライ制限（最大3回）やクライアント側フラグ（`client_retry`）を実装。
+  confidence: 1.0
+
+[5] id=dec_room_proj_test_002_01_007 turn=3 type=refresh_logic_impl
+  summary: トークンリフレッシュロジックをPythonコードスニペットとして実装。リフレッシュトークン検索、有効期限チェック、新トークン生成、DB更新（リトライ回数増加）を統合。
+  rationale: Jennifer Wilsonの提案が追加され、全員で確認された。ロジックは`design.txt`の`/api/auth/refresh`仕様に準拠し、トークン失効時のエラー（`TOKEN_EXPIRED`）とリトライ制限（最大3回）を実装。
+  confidence: 1.0

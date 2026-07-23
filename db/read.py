@@ -4,7 +4,7 @@ from db.connect import connect_db
 
 
 def get_department_members(department_name, count=2):
-    #指定部署から、稼働可能(is_active)なメンバーをcount人取得する。
+    #指定部署から稼働可能(is_active)なメンバーをcount人取得する
     #戻り値: [{"member_id":..., "display_name":..., "personality":..., "agent_persona_id":...}, ...]
 
     conn = connect_db()
@@ -41,7 +41,7 @@ def get_department_members(department_name, count=2):
 def get_department_members_by_skill(
     department_id, required_skills, count, exclude_member_ids=None
 ):
-    #新規: 指定部署から、required_skillsとの一致数が多い順にメンバーをcount人取得する
+    #指定部署から、必要スキルが合う順にメンバーをcount人取る(スカウト追加用)
     #exclude_member_ids: すでにルームにいる人を除外する(スカウト時に使う)
     if exclude_member_ids is None:
         exclude_member_ids = []
@@ -127,7 +127,7 @@ def get_persona(agent_persona_id):
 
 
 def get_department_leader(department_id):
-    #department_leaders_masterから、activeな部署の部長・PMの情報を取得する
+    #department_leaders_masterから部署の部長・PM情報を取得する
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -167,7 +167,7 @@ def get_recent_messages(room_id):
 
 
 def get_active_decisions(room_id):
-    #変更: CQO向けにactiveなD-listのみ取得する(overriddenは除外)
+    #CQO向けにactiveなD-listのみ取得する(cancelledは除外)
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -197,7 +197,7 @@ def get_active_decisions(room_id):
 
 
 def get_decisions_by_ids(room_id, decision_ids):
-    #変更: surgicalロールバック対象の決定事項をdecision_id指定で取得する
+    #部分ロールバック対象の決定事項をdecision_id指定で取得する
     if not decision_ids:
         return []
     conn = connect_db()
@@ -224,33 +224,3 @@ def get_decisions_by_ids(room_id, decision_ids):
         }
         for row in rows
     ]
-
-
-def get_room_state(room_id):
-    #変更: 局所ロールバック再開用にルーム状態を取得する
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT status, retry_count, short_summary, local_rollback_cursor,
-               last_rejection_report, is_suspicious, original_task_text, department_name
-        FROM department_rooms
-        WHERE room_id = %s
-        """,
-        (room_id,),
-    )
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    if row is None:
-        return None
-    return {
-        "status": row[0],
-        "retry_count": row[1],
-        "short_summary": row[2],
-        "local_rollback_cursor": row[3],
-        "last_rejection_report": row[4],
-        "is_suspicious": row[5],
-        "original_task_text": row[6],
-        "department_name": row[7],
-    }

@@ -1,0 +1,8 @@
+プロジェクト: proj_test_001
+タスク: Webアプリ版ポモドーロタイマーのログイン画面のUIをどう設計するか検討してください
+CQO状態: approved
+集約日時: 2026-07-22 21:55:53
+
+=== 部署一覧 ===
+- UIUX_00/  status=approved  room=room_proj_test_001_00
+- FE_01/  status=approved  room=room_proj_test_001_01

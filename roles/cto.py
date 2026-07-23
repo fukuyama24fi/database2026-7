@@ -6,14 +6,20 @@ from llm.ask_llm import ask_llm
 from prompts.build_system_prompt import build_system_prompt
 from utils.parse_json import clean_json_response
 
-CTO_PERSONA_ID = "persona_exec_cto"  # leadership.pyで生成したCTOのagent_persona_id
+CTO_PERSONA_ID = "persona_exec_cto"  #CTO役のagent_personasテーブルID
+
+
+def _normalize_assignment(assignment):
+    #旧キー名sub_task_textをdept_taskに統一する(応急処置)
+    if "sub_task_text" in assignment and "dept_task" not in assignment:
+        assignment["dept_task"] = assignment.pop("sub_task_text")
+    return assignment
 
 
 def cto_assign_tasks(task_text):
     """CTOがプロジェクト要件を読み、関係する部署と各部署へのタスクを決める
-    (設計書2.1のCTOの責務:技術的な実現可能性を判断し、部署へ配分する)
 
-    戻り値: [{"department_id": "FE", "sub_task_text": "..."}, ...]
+    戻り値: [{"department_id": "FE", "dept_task": "..."}, ...]
     """
     persona = get_persona(CTO_PERSONA_ID)
     if persona is None:
@@ -45,7 +51,7 @@ orderで実行順序を、depends_onで前提となる部署のコードを指�
 [
   {{
     "department_id": "FEなど、部署一覧のコードのいずれか",
-    "sub_task_text": "その部署が具体的に何をすべきかの説明",
+    "dept_task": "その部署が具体的に何をすべきかの説明",
     "order": 1から始まる整数(実行順序。依存関係が無ければ全部1でよい),
     "depends_on": ["この部署が始まる前に完了しているべき部署のコード"]
   }}
@@ -60,6 +66,9 @@ orderで実行順序を、depends_onで前提となる部署のコードを指�
         print("CTOの出力がJSONとして解析できませんでした:")
         print(raw)
         assignments = []
+
+    for assignment in assignments:
+        _normalize_assignment(assignment)
 
     return assignments
 
@@ -76,7 +85,7 @@ def cto_fix_assignments(task_text, assignments, disagreements):
     system_prompt = build_system_prompt("CTO", persona)
 
     assignment_text = "\n".join(
-        f"{a['department_id']}: {a['sub_task_text']}" for a in assignments
+        f"{a['department_id']}: {a.get('dept_task', a.get('sub_task_text', ''))}" for a in assignments
     )
     disagreement_text = "\n".join(
         f"{d['department_id']}: {d['reason']}" for d in disagreements
@@ -115,7 +124,7 @@ def cto_fix_assignments(task_text, assignments, disagreements):
 [
   {{
     "department_id": "FEなど、部署一覧のコードのいずれか",
-    "sub_task_text": "その部署が具体的に何をすべきかの説明",
+    "dept_task": "その部署が具体的に何をすべきかの説明",
     "order": 1から始まる整数(実行順序。依存関係が無ければ全部1でよい),
     "depends_on": ["この部署が始まる前に完了しているべき部署のコード"]
   }}
@@ -130,5 +139,8 @@ def cto_fix_assignments(task_text, assignments, disagreements):
         print("CTOの修正案がJSONとして解析できませんでした。元の配分を維持します:")
         print(raw)
         new_assignments = assignments
+
+    for assignment in new_assignments:
+        _normalize_assignment(assignment)
 
     return new_assignments

@@ -35,7 +35,7 @@ def init_db():
     ''')
     print("department_room_decisionsテーブルを作成しました")
 
-    #変更: D-listの局所ロールバック用カラム(status/overridden, discarded_from_turn)
+    #D-listのロールバック用カラム(status/cancelled, discarded_from_turn)
     db_operator.execute('''
     ALTER TABLE department_rooms_decisions
         ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'
@@ -44,7 +44,7 @@ def init_db():
     ALTER TABLE department_rooms_decisions
         ADD COLUMN IF NOT EXISTS discarded_from_turn INTEGER
     ''')
-    #変更: 決定事項が何ターン目で確定したか(origin_turn)。surgicalロールバック用
+    #決定事項が何ターン目で確定したか(origin_turn)。部分修正・Turn巻き戻し用
     db_operator.execute('''
     ALTER TABLE department_rooms_decisions
         ADD COLUMN IF NOT EXISTS origin_turn INTEGER
@@ -78,10 +78,10 @@ def init_db():
     ''')
     print("department_rooms テーブルを作成しました")
 
-    #変更: 局所ロールバック用カラム(local_rollback_cursor, last_rejection_report, is_suspicious)
+    #ロールバック用カラム(redo_from_turn, last_rejection_report, is_suspicious)
     db_operator.execute('''
     ALTER TABLE department_rooms
-        ADD COLUMN IF NOT EXISTS local_rollback_cursor INTEGER
+        ADD COLUMN IF NOT EXISTS redo_from_turn INTEGER
     ''')
     db_operator.execute('''
     ALTER TABLE department_rooms
@@ -184,8 +184,7 @@ def init_db():
 
     print("---データベースの初期化が完了しました---")
 
-    #直接実行時のみ動く。
-    # 他のプログラムでこのファイル内の関数を使うとき、importしたら勝手にデータベースの初期化(上書き)が起こる
+    #直接実行時のみinit_db()が動く(importだけではDB初期化しない)
 if __name__ == "__main__":
     #処理開始
     init_db()

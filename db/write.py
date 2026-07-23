@@ -5,7 +5,7 @@ from db.read import get_active_decisions
 
 
 def create_project(project_id, current_phase="phase2_department_dev", status="in_progress"):
-    #project_statesに1件作る
+    #project_statesテーブルにプロジェクト1件を登録する
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -22,7 +22,7 @@ def create_project(project_id, current_phase="phase2_department_dev", status="in
 
 
 def create_room(room_id, project_id, department_name, task_text):
-    #department_roomsに1件作る。recent_messagesは空リスト([])で初期化
+    #department_roomsテーブルに部署ルーム1件を登録する(recent_messagesは空[])
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -76,7 +76,7 @@ def save_decision(
     discarded_from_turn=None,
     origin_turn=None,
 ):
-    #department_rooms_decisions(D-list。長期記憶)に1件保存する
+    #department_rooms_decisions(D-list。長期記憶)に決定事項1件を保存する
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -116,26 +116,8 @@ def save_decision(
     print(f"room={room_id} にD-list({decision_id})を保存しました(status={status})")
 
 
-def supersede_active_decisions(room_id, discarded_from_turn=None):
-    #変更: 現行D-listをoverriddenにし、CQOには見せない(監査用にDBには残す)
-    conn = connect_db()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        UPDATE department_rooms_decisions
-        SET status = 'overridden', discarded_from_turn = %s
-        WHERE room_id = %s AND status = 'active'
-        """,
-        (discarded_from_turn, room_id),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-    print(f"room={room_id} のactive D-listをoverriddenにしました")
-
-
-def override_decisions_by_ids(room_id, decision_ids):
-    #変更: surgicalロールバック。指定decision_idだけoverriddenにする(他はactiveのまま)
+def cancel_decisions_by_ids(room_id, decision_ids):
+    #部分ロールバック。指定decision_idだけcancelledにする(他はactiveのまま)
     if not decision_ids:
         return
     conn = connect_db()
@@ -143,7 +125,7 @@ def override_decisions_by_ids(room_id, decision_ids):
     cur.execute(
         """
         UPDATE department_rooms_decisions
-        SET status = 'overridden'
+        SET status = 'cancelled'
         WHERE room_id = %s AND decision_id = ANY(%s) AND status = 'active'
         """,
         (room_id, list(decision_ids)),
@@ -151,17 +133,17 @@ def override_decisions_by_ids(room_id, decision_ids):
     conn.commit()
     cur.close()
     conn.close()
-    print(f"room={room_id} のD-list {len(decision_ids)}件をsurgical overriddenしました")
+    print(f"room={room_id} のD-list {len(decision_ids)}件をcancelledしました")
 
 
-def override_decisions_from_turn(room_id, from_turn):
-    #変更: origin_turn>=from_turn の決定だけoverridden(Turn巻き戻し時の補助)
+def cancel_decisions_from_turn(room_id, from_turn):
+    #origin_turn>=from_turnの決定だけcancelled(Turn巻き戻し時の補助)
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
         """
         UPDATE department_rooms_decisions
-        SET status = 'overridden', discarded_from_turn = %s
+        SET status = 'cancelled', discarded_from_turn = %s
         WHERE room_id = %s AND status = 'active'
           AND (origin_turn IS NULL OR origin_turn >= %s)
         """,
@@ -170,13 +152,13 @@ def override_decisions_from_turn(room_id, from_turn):
     conn.commit()
     cur.close()
     conn.close()
-    print(f"room={room_id} origin_turn>={from_turn} のD-listをoverriddenしました")
+    print(f"room={room_id} origin_turn>={from_turn} のD-listをcancelledしました")
 
 
 def refresh_active_decisions(
     room_id, department_name, extracted_decisions, current_turn, scope_anchor=None
 ):
-    #変更: extract結果を反映。未変更決定はorigin_turn/decision_idを保持、surgicalに差し替え可能
+    #find結果を反映。未変更決定はorigin_turn/decision_idを保持、部分修正に差し替え可能
     existing = get_active_decisions(room_id)
     existing_by_type = {d["decision_type"]: d for d in existing}
     seen_types = set()
@@ -188,10 +170,10 @@ def refresh_active_decisions(
         old = existing_by_type.get(dtype)
         if old and old.get("summary") == decision.get("summary"):
             decision_id = old["decision_id"]
-            origin_turn = old.get("origin_turn") or current_turn  #変更: 内容不変ならorigin_turn保持
+            origin_turn = old.get("origin_turn") or current_turn  #内容不変ならorigin_turn保持
         elif old:
             decision_id = old["decision_id"]
-            origin_turn = current_turn  #変更: 内容変更時のみorigin_turn更新
+            origin_turn = current_turn  #内容変更時のみorigin_turn更新
         else:
             decision_id = f"dec_{room_id}_{next_idx:03d}"
             next_idx += 1
@@ -220,34 +202,27 @@ def refresh_active_decisions(
                 rationale=old.get("rationale", ""),
                 scope_anchor=scope_anchor,
                 confidence=old.get("confidence"),
-                status="overridden",
+                status="cancelled",
                 origin_turn=old.get("origin_turn"),
             )
 
 
-def save_active_decisions(room_id, department_name, decisions, scope_anchor=None, current_turn=1):
-    #変更: 互換ラッパー。refresh_active_decisionsへ委譲(origin_turn付き)
-    refresh_active_decisions(
-        room_id, department_name, decisions, current_turn, scope_anchor
-    )
-
-
 def update_room_rollback_state(
     room_id,
-    local_rollback_cursor=None,
+    redo_from_turn=None,
     last_rejection_report=None,
     is_suspicious=None,
     status=None,
     retry_count=None,
 ):
-    #変更: 局所ロールバック用のルーム状態を更新する
+    #ロールバック用のルーム状態を更新する
     conn = connect_db()
     cur = conn.cursor()
     fields = []
     values = []
-    if local_rollback_cursor is not None:
-        fields.append("local_rollback_cursor = %s")
-        values.append(local_rollback_cursor)
+    if redo_from_turn is not None:
+        fields.append("redo_from_turn = %s")
+        values.append(redo_from_turn)
     if last_rejection_report is not None:
         fields.append("last_rejection_report = %s")
         values.append(last_rejection_report)
@@ -285,7 +260,7 @@ def add_message_to_room(room_id, speaker, message):
     current_messages = json.loads(row[0]) if row and row[0] else []
 
     current_messages.append({"speaker": speaker, "message": message})
-    current_messages = current_messages[-5:]  # 直近5件だけ残す(短期記憶のルール)
+    current_messages = current_messages[-5:]  #直近5件だけ残す(短期記憶のルール)
 
     cur.execute(
         "UPDATE department_rooms SET recent_messages = %s WHERE room_id = %s",
@@ -298,7 +273,7 @@ def add_message_to_room(room_id, speaker, message):
 
 
 def assign_member_to_room(room_id, member_id, role_in_room, turn):
-    #新規: room_assignmentsに1行INSERTする。同じ人を二重登録してもエラーにしない
+    #room_assignments表にメンバー参加記録を1行追加。同じ人を二重登録してもエラーにしない
     conn = connect_db()
     cur = conn.cursor()
     cur.execute(
@@ -317,7 +292,7 @@ def assign_member_to_room(room_id, member_id, role_in_room, turn):
 
 
 def update_room_status(room_id, status, retry_count=None):
-    #変更: 部長レビュー・差し戻しに伴い、ルームのstatus/retry_countを更新する
+    #部長レビュー・差し戻しに伴い、ルームのstatus/retry_countを更新する
     conn = connect_db()
     cur = conn.cursor()
     if retry_count is None:

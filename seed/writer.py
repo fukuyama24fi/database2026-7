@@ -8,16 +8,16 @@ def write_employees_to_db(rows):
     output_filepath = "employees_seed.csv"
     with open(
         output_filepath, "w", newline="", encoding="utf-8"
-    ) as f:  # "W":書き込みモード。newline="":二重改行を防ぐ
+    ) as f:  #"W":書き込みモード。newline="":二重改行を防ぐ
         writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        writer.writeheader()  # 列名
+        writer.writeheader()  #列名
         writer.writerows(rows)
 
     print(f"{len(rows)}件を {output_filepath} に書き出しました。")
 
     print("--- ステージングテーブルへの流し込みを開始します ---")
 
-    # DBに接続
+    #DBに接続
     database_connection = psycopg2.connect(
         host=os.getenv("DB_HOST", "localhost"),
         database=os.getenv("DB_NAME", "simulation"),
@@ -27,14 +27,14 @@ def write_employees_to_db(rows):
     )
     db_operator = database_connection.cursor()
 
-    # COPYコマンドの実行
+    #COPYコマンドの実行
     with open(output_filepath, "r", encoding="utf-8") as f:
-        # FROM STDIN:ファイルfの中身をPostgreSQLにつながるSTDINに流す。意味は分かっていない
+        #FROM STDIN:ファイルfの中身をPostgreSQLにつながるSTDINに流す。意味は分かっていない
         db_operator.copy_expert("COPY staging_employees FROM STDIN WITH CSV HEADER", f)
 
     print("CSVデータを staging_employees に流し込みました。")
 
-    # 各テーブルに社員情報を振り分ける
+    #各テーブルに社員情報を振り分ける
     #department_members_masterへ
     db_operator.execute("""
         INSERT INTO department_members_master
@@ -156,7 +156,7 @@ def reset_seed_tables():
         port=os.getenv("DB_PORT", 5432),
     )
     db_operator = connection.cursor()
-    # 外部キー依存がある場合は削除順に注意
+    #外部キー依存がある場合は削除順に注意
     db_operator.execute("TRUNCATE TABLE department_members_master, agent_personas, executives_master, department_leaders_master")
     connection.commit()
     db_operator.close()

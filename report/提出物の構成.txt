@@ -1,0 +1,28 @@
+【提出物のフォルダ構成（例）】
+
+提出用/
+├── program/          ← プログラムコード一式
+│   ├── run_project.py
+│   ├── db/
+│   ├── meeting/
+│   ├── roles/
+│   ├── memory/
+│   ├── prompts/
+│   ├── llm/
+│   ├── workspace/
+│   ├── seed/
+│   ├── data/
+│   ├── utils/
+│   └── settings.py
+│
+└── report/           ← レポート（HTML + 画像）
+    ├── index.html
+    └── images/
+        ├── 01_startup.png
+        ├── 02_top_meeting.png
+        ├── ...（計8枚）
+        └── 08_final_outputs.png
+
+※ program/ フォルダは、リポジトリ直下の .py ファイルと各サブフォルダを
+  コピーして作ってください（.venv や __pycache__ は含めない）。
+※ report/ フォルダはこの report/ フォルダをそのまま使えます。

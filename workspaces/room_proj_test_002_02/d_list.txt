@@ -1,0 +1,75 @@
+[1] id=dec_room_proj_test_002_02_003 turn=3 type=design_update
+  summary: ログインUIのレスポンシブ対応を最適化し、以下の要件を決定した。
+
+1. メール・パスワード入力フィールドの最大幅をコンテナ幅に完全固定化（レスポンシブ対応強化）。
+2. メール入力フィールドのラベル位置をスマホ表示時のみ「左側」に統一（現行の「上側」から変更）。
+3. パスワードヒントの表示位置をスマホ表示時のみ「左下」に固定化（動的調整を完全削除）。
+4. エラーメッセージコンテナの最大幅をコンテナ幅に完全固定化（動的調整を削除）。
+
+状態管理では、APIレスポンスから取得した `retryAllowed` フラグを明確化した。
+  rationale: レスポンシブ対応の最適化は、ユーザー体験向上とスマホ表示時のレイアウト安定性を重視。
+
+1. メール入力フィールドのラベル位置変更は、スマホ表示時の入力操作の直感性を向上させるため。
+2. パスワードヒントの固定化は、動的調整が小さい画面で不安定な場合を回避し、一貫性を確保。
+3. エラーメッセージコンテナの固定幅は、レイアウトの安定性と読みやすさを確保。
+
+状態管理の `retryAllowed` フラグの明確化は、APIレスポンスとUI層の同期を強化し、リトライロジックの正確性を保証。
+
+議論中のメンバー全員（Matthew Anderson, Susan Williams）が賛同し、設計文書（design.txt）と一致する要件として合意された。
+  confidence: 0.98
+
+[2] id=dec_room_proj_test_002_02_004 turn=3 type=auth_state_manager
+  summary: ログインUIの状態管理設計を以下の構成で決定した。
+
+1. 状態変数:
+   - `isLoading` (boolean, 初期値: false): ログイン処理中のフラグ
+   - `errorMessage` (string, 初期値: ''): エラーメッセージ（UI表示用）
+   - `authenticated` (boolean, 初期値: false): ログイン成功フラグ
+   - `retryCount` (number, 初期値: 0): リトライ回数（API側と同期）
+   - `retryAllowed` (boolean, 初期値: false): リトライ可能フラグ（APIレスポンスから受け取る）
+
+2. 遷移ロジック:
+   - ログインフォーム送信 → `isLoading` を true に設定
+   - API成功 → `authenticated` を true に設定、`retryCount` を 0 にリセット、ダッシュボードへナビゲート
+   - APIエラー → `errorMessage` にエラーメッセージを設定、`retryCount` をインクリメント、3回以内ならリトライボタンを表示
+   - リトライボタン押下 → 状態を `idle` にリセット
+
+3. UIコンポーネント:
+   - `LoginForm` コンポーネント: `onSubmit`, `onError`, `onRetry` のハンドラープロパティを定義
+   - `LoginErrorDisplay` コンポーネント: `errorMessage` と `retryAllowed` を受け取るプロパティを定義
+  rationale: 状態管理設計は、ユーザー認証ロジックの可視化とUI層の柔軟性向上を目的。
+
+1. 変数名・初期値は、明確な目的と初期状態を定義し、開発者が理解しやすい設計とした。
+2. 遷移ロジックは、APIレスポンスに基づく動作を明確化し、リトライロジックの正確性を保証。
+3. `retryAllowed` フラグのAPIレスポンスからの受け取りは、API側との同期を強化し、エラー処理の一貫性を確保。
+
+議論中のメンバー全員（Matthew Anderson, Susan Williams）が賛同し、design.txtの`auth_state_manager`セクションと完全に対応した決定として合意された。
+  confidence: 0.99
+
+[3] id=dec_room_proj_test_002_02_005 turn=3 type=api_integration
+  summary: ログインAPIの統合要件を以下の構成で決定した。
+
+1. APIリクエスト:
+   - メソッド: POST
+   - エンドポイント: /api/auth/login
+   - 入力フィールド: email, password
+
+2. レスポンスハンドリング:
+   - 成功時:
+     - JWTトークン、有効期限（秒）、ユーザーID、`retry_allowed` (boolean) を返す
+   - エラー時:
+     - エラーコード: INVALID_CREDENTIALS, TOKEN_EXPIRED, MAX_RETRIES_EXCEEDED
+     - エラーメッセージ: APIから返される文字列
+     - `retry_allowed` (boolean): 通常は false
+
+3. UIとの連携:
+   - ロジックハンドラ（`onSubmit`, `onError`, `onRetry`）は、API呼び出し前後の処理（リトライ回数チェック等）を実装
+   - エラーメッセージは `auth_state_manager` から受け取り、UI表示に反映
+  rationale: API統合は、ログイン処理の信頼性とUI層の同期を確保するため。
+
+1. エンドポイントと入力フィールドは、既存のAPI仕様と一致し、変更のリスクを最小化。
+2. レスポンスハンドリングは、成功時の成功フラグ（`authenticated`）とエラー時のリトライ可能フラグ（`retryAllowed`）を明確に定義し、UI層の動作を制御。
+3. エラーコードの定義は、ユーザーが再試行する際の判断基準を明確化。
+
+議論中のメンバー全員（Matthew Anderson, Susan Williams）が賛同し、design.txtの`api_integration`セクションと完全に対応した決定として合意された。
+  confidence: 0.98

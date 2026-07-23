@@ -16,7 +16,7 @@ personality_list = [
     "世話焼き",
 ]
 
-# 部署ごとのテンプレ
+#部署ごとのテンプレ
 judgment_anchor_map = {
     "FE": {
         "primary_questions": [
@@ -83,7 +83,7 @@ judgment_anchor_map = {
     },
 }
 
-# 性格ごとのテンプレ
+#性格ごとのテンプレ
 style_persona_map = {
     "論理的": {
         "tone": "論理的",

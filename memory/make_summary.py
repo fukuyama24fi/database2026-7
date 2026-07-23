@@ -1,32 +1,16 @@
 ﻿from llm.ask_llm import ask_llm
 
 
-def make_summary(task_text, full_transcript):
-    #議論全文(full_transcript)から200字程度の日本語要約を作る(中期記憶)"""
-    transcript_text = "\n".join(
-        f"{m['speaker']}: {m['message']}" for m in full_transcript
-    )
-
-    system_prompt = "あなたは会議の記録係です。要約以外の文章は出力しないでください。"
-    user_prompt = f"""タスク: {task_text}
-
-以下は部署内での議論の全文です。200字程度の日本語で要約してください。
-
-{transcript_text}"""
-
-    return ask_llm(system_prompt, user_prompt)
-
-
-#新規: 実験設定(3ターン想定)の文字数定数。本番(5ターン)に切り替えるときは下のコメントアウトを入れ替える
+#実験設定(3ターン想定)の文字数定数。本番(5ターン)に切り替えるときは下のコメントアウトを入れ替える
 TURN_SUMMARY_MAX_CHARS = 150
 FINAL_SUMMARY_TARGET_CHARS = 450
-# 本番設定(5ターン想定)
-# TURN_SUMMARY_MAX_CHARS = 150
-# FINAL_SUMMARY_TARGET_CHARS = 750
+#本番(5ターン)用の文字数設定。使うときは上の定数と入れ替える
+#TURN_SUMMARY_MAX_CHARS = 150
+#FINAL_SUMMARY_TARGET_CHARS = 750
 
 
 def make_turn_summary(task_text, turn_messages):
-    #新規: 1ターン分(全員が1回ずつ発言した分)だけを短い要約に圧縮する。PM判定用の材料を作る
+    #1ターン分(全員が1回ずつ発言した分)だけを短い要約に圧縮する(PM合意判定とルーム要約の材料)
     transcript_text = "\n".join(
         f"{m['speaker']}: {m['message']}" for m in turn_messages
     )
@@ -44,14 +28,14 @@ def make_turn_summary(task_text, turn_messages):
 
 
 def join_turn_summaries(turn_summaries):
-    #新規: 各ターンの要約をターン番号付きで連結する(LLM呼び出しなし。最終整形の材料を作る)
+    #各ターンの要約をターン番号付きで連結する(LLM呼び出しなし。最終整形の材料を作る)
     return "\n".join(
         f"ターン{s['turn_number']}: {s['summary']}" for s in turn_summaries
     )
 
 
 def polish_final_summary(task_text, turn_summaries):
-    #新規: ターン要約の連結結果を、読みやすい1つの文章に整形する(既存make_summaryの置き換え)
+    #ターン要約の連結結果を、読みやすい1つの文章に整形する(short_summary保存用)
     material = join_turn_summaries(turn_summaries)
     material_len = len(material)
 

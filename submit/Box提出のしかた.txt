@@ -1,0 +1,41 @@
+【Box提出用フォルダ構成（他の生徒と同じ形式）】
+
+Boxにアップロードするフォルダ:
+
+レポート/
+├── report.html
+└── images/
+    ├── 01_startup.png
+    ├── 02_discussion.png
+    ├── 03_cqo.png
+    ├── 04_design.png
+    ├── 05_dlist.png
+    └── 06_folder.png
+
+プログラム/
+├── run_project.py
+├── settings.py
+├── db/
+├── meeting/
+├── roles/
+├── memory/
+├── prompts/
+├── llm/
+├── workspace/
+├── seed/
+├── data/
+└── utils/
+
+※ .venv や __pycache__ は入れない
+※ workspaces/（実行結果）は入れなくてOK
+
+【手順】
+1. submit/report/ フォルダを「レポート」にリネームしてBoxに上げる
+2. プログラムフォルダを別途Boxに上げる
+3. 提出前に report.html をPCで開いて画像が全部見えるか確認
+
+【先生が見る方法】
+- Box上で report.html をクリック → 本文は見える
+- 画像はプレビューで出ないことがある
+- 他の生徒も同じ形式なら、先生は慣れた見方をしているはず
+- 不安なら「report.html と images フォルダをセットでダウンロードして開いてください」とコメント

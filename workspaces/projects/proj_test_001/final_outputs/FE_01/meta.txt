@@ -1,0 +1,5 @@
+room_id=room_proj_test_001_01
+department_id=FE
+status=approved
+is_suspicious=False
+decisions_count=1
