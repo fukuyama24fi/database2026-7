@@ -1,1 +1,444 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>システム概要</title>
+  <style>
+    body {
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+      line-height: 1.9;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+      color: #222;
+      background: #fafafa;
+    }
+    h1 {
+      border-bottom: 3px solid #336699;
+      padding-bottom: 8px;
+      color: #336699;
+    }
+    h2 {
+      border-left: 5px solid #336699;
+      padding-left: 12px;
+      margin-top: 40px;
+      color: #336699;
+    }
+    h3 {
+      color: #444;
+      margin-top: 24px;
+    }
+    .info {
+      background: #eef4fb;
+      padding: 12px 16px;
+      border-radius: 6px;
+      margin-bottom: 24px;
+    }
+    .figure {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .figure img {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .caption {
+      font-size: 0.9em;
+      color: #555;
+      margin-top: 10px;
+      text-align: left;
+    }
+    pre {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.85em;
+      line-height: 1.5;
+    }
+    code {
+      background: #eee;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th {
+      background: #eef4fb;
+    }
+    ul, ol {
+      padding-left: 24px;
+    }
+    .flow-box {
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+      font-family: monospace;
+      white-space: pre-line;
+      line-height: 1.7;
+    }
+    .box {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+  </style>
+</head>
+<body>
 
+<h1>システム概要</h1>
+
+<div class="info">
+  <strong>作成日日：</strong> 2026年7月22日<br>
+  <strong>題材：</strong> データベースを使った多部署AI設計シミュレーション
+</div>
+
+<!-- ============================================================ -->
+<h2>1. 作成するソフトウェアの概要</h2>
+
+<h3>1.1 このソフトは何をするものか</h3>
+<p>
+  このソフトは、<strong>データベース（PostgreSQL）とAIを使って、ソフトウェアの設計を進めるシミュレーション</strong>です。
+</p>
+<p>
+  普通の会社だと、CTO（技術責任者）が仕事を各部署に分け、社員が会議して設計書を作り、
+  部長がチェックして、最後に品質管理担当（CQO）が全体を見直します。
+  このソフトは、その流れをAIが代わりにやってくれます。
+</p>
+<p>
+  使い方は、<code>run_project.py</code> の中身を書き換えてから実行します。
+  <code>main()</code> 関数の先頭で <strong><code>project_id</code></strong>（プロジェクト名）と
+  <strong><code>task_text</code></strong>（やってほしいこと）をセットします。
+  実行すると、AIが議論して設計書と「決まったことリスト（D-list）」を作ります。
+</p>
+
+<h3>1.2 処理の流れ</h3>
+<div class="flow-box">① CTOが「どの部署が何を担当するか」を決める
+   ↓
+② 部長たちが配分内容にOKを出す（上流会議）
+   ↓
+③ 各部署のAI社員が会議して設計書を作る
+   ↓
+④ 部長が成果物をチェック（OK / やり直し）
+   ↓
+⑤ CQOが部署間の矛盾がないか見る
+   ↓ 矛盾があれば
+   部長会議 → 修正 → もう一度⑤へ
+   ↓ 問題なければ
+⑥ 最終成果物をフォルダに保存</div>
+
+<h3>1.3 使い方</h3>
+<table>
+  <tr><th>順番</th><th>コマンド</th><th>何をするか</th></tr>
+  <tr><td>1</td><td><code>python db/create_tables.py</code></td><td>DBにテーブルを作る（最初の1回だけ）</td></tr>
+  <tr><td>2</td><td><code>python seed/run_seed.py</code></td><td>社員・部長のデータをDBに入れる（最初の1回だけ）</td></tr>
+  <tr><td>3</td><td><code>run_project.py</code> を編集して <code>python run_project.py</code></td><td><code>project_id</code> と <code>task_text</code> を書き換えてから実行</td></tr>
+  <tr><td>4</td><td>フォルダを見る</td><td><code>workspaces/</code> 以下に結果が出る</td></tr>
+</table>
+
+<h3>1.4 特長</h3>
+<ul>
+  <li><strong>DBに記憶を保存する</strong> — 会話・要約・決まったことをDBに残す</li>
+  <li><strong>いろいろな役割のAIが動く</strong> — CTO、部長、PM、社員、CQO など</li>
+  <li><strong>間違えたら直せる</strong> — 矛盾が見つかったら、やり直しや部分修正ができる</li>
+  <li><strong>AIが使えなくても次を試す</strong> — Groq → Mistral → Gemini の順で切り替わる</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2>2. 設計方針</h2>
+
+<h3>2.1 どんな形で作ったか</h3>
+<table>
+  <tr><th>項目</th><th>内容</th></tr>
+  <tr><td>言語</td><td>Python 3</td></tr>
+  <tr><td>データベース</td><td>PostgreSQL</td></tr>
+  <tr><td>AI</td><td>Groq / Mistral / Gemini のAPI</td></tr>
+  <tr><td>画面</td><td>なし（黒い画面＝コンソールに結果を表示）</td></tr>
+</table>
+
+<h3>2.2 フォルダの分け方</h3>
+<p>機能ごとにフォルダを分けました。1ファイルに全部書くとごちゃごちゃするので、
+役割・会議・DB・記憶などに分けています。</p>
+<div class="flow-box">datebase/
+├── run_project.py   … ここから全部始まる
+├── db/              … データベースの読み書き
+├── meeting/         … 会議・議論
+├── roles/           … CTO, 部長, PM, CQO
+├── memory/          … 決まったことの抽出・要約
+├── llm/             … AIを呼び出す
+├── workspace/       … ファイルの読み書き
+├── seed/            … 最初のデータ投入
+└── workspaces/      … 実行結果がここに出る</div>
+
+<h3>2.3 データベースの考え方</h3>
+<p>AIの「覚えておく情報」を3段階に分けてDBに保存します。</p>
+<table>
+  <tr><th>種類</th><th>DBのどこ</th><th>何のため</th></tr>
+  <tr><td>短期</td><td>recent_messages</td><td>直近の会話（発言の続きを理解するため）</td></tr>
+  <tr><td>中期</td><td>short_summary</td><td>各ターンの要約をまとめた200字程度の文章。部長やCQOが「この部署は何を決めたか」を素早く把握するために使う</td></tr>
+  <tr><td>長期</td><td>department_rooms_decisions</td><td>議論で確定した決定事項（D-list）。何を決めたか・根拠・何ターン目かを保存し、やり直し時は status で取り消し管理する</td></tr>
+</table>
+
+<h3>2.4 AIの性格設計（anchor と persona）</h3>
+<p>
+  各AIエージェントには、DBの <code>agent_personas</code> テーブルに2種類の情報を保存しています。
+</p>
+<table>
+  <tr><th>名前</th><th>DB上の項目</th><th>役割</th><th>重要度</th></tr>
+  <tr><td><strong>anchor</strong><br>（専門ドメイン）</td><td>judgment_anchor</td><td>「何を重視するか」「何を許さないか」など、<strong>判断の基準</strong>。部署ごとの専門領域（FEならUI実装、QAならテストなど）</td><td><strong>メイン</strong></td></tr>
+  <tr><td><strong>persona</strong><br>（話し方）</td><td>style_persona</td><td>トーンや言い回しなど、<strong>話し方の個性</strong></td><td>サブ</td></tr>
+</table>
+<p>
+  AIへの指示文（<code>prompts/build_system_prompt.py</code>）では、
+  まず anchor（判断軸）を「絶対に譲らない基準」として書き、
+  そのあとに persona（話し方）を添える形にしています。
+  部長の検収なども「自部署の anchor の範囲内だけで判断する」ルールになっています。
+</p>
+<p>主なテーブル：</p>
+<ul>
+  <li><code>project_states</code> — プロジェクトの状態</li>
+  <li><code>department_rooms</code> — 部署ごとの「部屋」（議論の場）</li>
+  <li><code>department_rooms_decisions</code> — 決まったこと（D-list）</li>
+  <li><code>department_members_master</code> — 社員データ</li>
+  <li><code>agent_personas</code> — AIの anchor（judgment_anchor）と persona（style_persona）</li>
+</ul>
+
+<h3>2.5 やり直しの仕組み</h3>
+<p>CQOが「部署Aと部署Bの内容が矛盾している」と見つけたとき、2通りの直し方があります。</p>
+<ul>
+  <li><strong>部分修正</strong> — 問題のある決定だけ直す</li>
+  <li><strong>Turn巻き戻し</strong> — あるターンから議論を最初からやり直す</li>
+</ul>
+<p>どちらも、DB上で古い決定の <code>status</code> を <code>cancelled</code>（取り消し）に変えることで、
+過去の記録を残しつつ「今有効な決定」だけ取り出せるようにしています。</p>
+
+<!-- ============================================================ -->
+<h2>3. プログラムの説明</h2>
+
+<h3>3.1 メイン（run_project.py）</h3>
+<p>全部の流れをこの1ファイルから始めます。実行前に <code>project_id</code> と <code>task_text</code> を書き換えます。</p>
+<pre>
+def main():
+    project_id = "proj_test_002"   # ← プロジェクトID（フォルダ名などに使われる）
+    task_text = "Webアプリ版ポモドーロタイマーのログイン機能を設計してください"  # ← やってほしいこと
+
+    create_project(project_id)                 # ① DBにプロジェクト登録
+    assignments = cto_assign_tasks(task_text)    # ② CTOが部署配分
+    assignments = run_top_meeting(...)           # ③ 部長がOKか確認
+
+    for assignment in assignments:
+        result = run_department_room(...)      # ④ 各部署で議論
+
+    while cqo_round &lt; 3:                       # ⑤ CQO監査（最大3回）
+        if 問題なし: break
+        部長会議 → 修正 → 再議論
+
+    collect_final_outputs(...)                 # ⑥ 成果物をまとめる
+</pre>
+
+<h3>3.2 テーブル作成（db/create_tables.py）</h3>
+<p>PostgreSQLに接続して、必要なテーブルを作ります。
+D-list用テーブルには「取り消しフラグ（status）」と「何ターン目で決まったか（origin_turn）」を入れて、
+やり直しに対応できるようにしました。</p>
+
+<h3>3.3 部署ルーム（meeting/run_one_department.py）</h3>
+<p>1つの部署で行う処理です。</p>
+<ol>
+  <li>DBにルームを登録</li>
+  <li>スキルに合う社員をDBから選ぶ</li>
+  <li>PMが役割を割り当て</li>
+  <li>社員全員が数ターン議論する</li>
+  <li>決まったことをD-listとしてDBに保存</li>
+  <li>部長がチェック（OKなら終了、NGならやり直し）</li>
+</ol>
+<p>部長のやり直しは最大2回。3回目は強制でOKにします。</p>
+
+<h3>3.4 AIへの指示文（prompts/build_system_prompt.py）</h3>
+<p>DBから読んだ anchor と persona を使って、AIへの指示文を組み立てます。</p>
+<pre>
+anchor = persona["judgment_anchor"]   # メイン：判断軸（専門ドメイン）
+style = persona["style_persona"]    # サブ：話し方
+
+# 指示文では anchor を先に、「絶対に譲らない基準」として書く
+# そのあと persona で話し方を指定する
+</pre>
+
+<h3>3.5 社員の1発言（meeting/member_turn.py）</h3>
+<p>社員1人が発言するときの処理です。</p>
+<ol>
+  <li>DBから anchor・persona と直近の会話を読む</li>
+  <li>AIに設計案を考えさせる</li>
+  <li>結果をDBと design.txt に保存する</li>
+</ol>
+
+<h3>3.6 AI呼び出し（llm/ask_llm.py）</h3>
+<p>Groq、Mistral、Gemini の3つを用意しています。
+1つがエラー（使いすぎで止められた等）になったら、次のAIに自動で切り替わります。</p>
+
+<!-- ============================================================ -->
+<h2>4. 実行結果</h2>
+
+<h3>4.1 部署内の議論と部長のチェック</h3>
+<div class="figure">
+  <img src="images/03_discussion.png" alt="部署議論と部長検収">
+  <div class="caption">
+    図1: 部署ルームでの議論の様子。ターン3の要約が表示され、最後に部長が
+    <code>verdict=approved</code>（承認）と判定している。
+    途中でGroqが使えなくなり、Mistralに自動切り替えしている部分も見える。
+  </div>
+</div>
+
+<h3>4.2 設計書の更新履歴（design_history.txt）</h3>
+<div class="figure">
+  <img src="images/06_design_history.png" alt="設計書の更新履歴">
+  <div class="caption">
+    図2: 議論するたびに design.txt が更新され、その履歴が design_history.txt に残る。
+    社員（James Martin、Jennifer Lopez）がテスト仕様を少しずつ足していっている。
+  </div>
+</div>
+
+<h3>4.3 決まったことリスト（d_list.txt）</h3>
+<div class="figure">
+  <img src="images/07_dlist_txt.png" alt="D-list">
+  <div class="caption">
+    図3: 議論から抽出された「決まったこと（D-list）」。
+    テスト仕様や性能要件など、何を決めたか・なぜそう決めたかが書かれている。
+  </div>
+</div>
+
+<h3>4.4 成果物フォルダの構成</h3>
+<div class="figure">
+  <img src="images/08_workspaces_folder.png" alt="workspacesフォルダ">
+  <div class="caption">
+    図4: 実行結果が <code>workspaces/</code> フォルダに保存される。
+    部署ごとに <code>room_proj_test_002_XX</code> フォルダができ、
+    中に design.txt、d_list.txt、team_memo.txt などが入る。
+  </div>
+</div>
+
+<p>以上が、実際に動かしたときの結果です。</p>
+
+<!-- ============================================================ -->
+<h2>5. 考察</h2>
+
+<h3>5.1 DBを使って「覚えさせる」ことについて</h3>
+<p>
+  このソフトで一番こだわったのは、AIの情報をDBに保存することです。
+  AIは1回の会話しか覚えられないので、
+  「直近の会話」「短い要約」「決まったこと」をDBに分けて保存しています。
+</p>
+<p>
+  特にD-listの <code>status</code> が便利でした。
+  矛盾が見つかって直すとき、古いデータを消さずに <code>cancelled</code> にするだけで、
+  「今有効な決定」だけ取り出せます。
+</p>
+
+<h3>5.2 軽量LLMでも動かすこと（サブ実験）</h3>
+<p>
+  今回は、高価な大きなAIモデルではなく、
+  <strong>軽量LLM（llama-3.1-8b-instant など）でも動くようにする</strong>ことも目的の1つでした。
+  これはサブ実験です。
+</p>
+<p>
+  最初はAIの返答がバラバラで、JSON形式で返してくれないこともありました。
+  でも、プロンプトの書き方を直したり、JSON解析のエラー処理を入れたり、
+  AIが使えなくなったら別のAIに切り替える機能を入れたりするうちに、
+  <strong>少しずつ回答が安定してきました</strong>。
+</p>
+<p>
+  実際に動かしたときも、Groqが「使いすぎです（429エラー）」となって
+  Mistralに切り替わり、そこから処理が続いていました（図1参照）。
+  軽量モデル単体では不安定でも、切り替えやエラー処理を組み合わせれば
+  実用的に動かせるとわかりました。
+</p>
+
+<h3>5.3 やり直し機能について</h3>
+<p>
+  CQOが部署間の矛盾を見つけたとき、
+  「部分修正（問題の部分だけ直す）」と
+  「Turn巻き戻し（議論ごとやり直す）」の2パターンを作りました。
+  軽い矛盾なら部分修正の方が早く終わります。
+</p>
+
+<h3>5.4 作れなかったこと（今後追加したい機能）</h3>
+
+<div class="box">
+<p><strong>① CEOとユーザーの対話機能</strong></p>
+<p>
+  もともとは、<strong>CEOがユーザーと何度か会話して、要望をはっきりさせてからCTOに渡す</strong>予定でした。
+</p>
+<p>イメージ：</p>
+<div class="flow-box">ユーザー「ログイン機能を作って」
+   ↓
+CEO「SNSログインも必要ですか？」
+   ↓
+ユーザー「はい、Googleログインがいい」
+   ↓
+CEO「わかりました。CTO、Googleログイン付きのログイン機能をお願いします」
+   ↓
+CTOが部署配分を開始</div>
+<p>
+  でも今は、<code>run_project.py</code> の中に要件テキストを直接書いているだけなので、
+  CEOの部分は未実装です。ユーザーがチャットで要件を伝えられるようにしたいです。
+</p>
+</div>
+
+<div class="box">
+<p><strong>② Pythonコード（.py）の自動生成</strong></p>
+<p>
+  今のソフトは「設計書（design.txt）」と「決まったこと（d_list.txt）」を出力しますが、
+  <strong>実際に動く .py ファイルは作れません</strong>。
+</p>
+<p>
+  例えばフロントエンド部署ならHTML/CSSのコード、
+  バックエンド部署ならFlaskのAPIコードを自動で書いて
+  <code>workspaces/</code> に保存できるようにしたいです。
+</p>
+<p>
+  今は <code>member_turn.py</code> が design.txt だけ更新していますが、
+  ここに「.pyファイルも書く」処理を追加すれば実現できそうです。
+</p>
+</div>
+
+<div class="box">
+<p><strong>③ その他、やりたいこと</strong></p>
+<ul>
+  <li>依存関係のない部署を<strong>同時に動かす</strong>（今は1つずつ順番）</li>
+  <li>議論の様子が見える<strong>Web画面</strong>を作る（今は黒い画面だけ）</li>
+  <li>DB部分の<strong>自動テスト</strong>を書く（AI部分は結果が毎回違うのでテストが難しい）</li>
+</ul>
+</div>
+
+<h3>5.5 まとめ</h3>
+<p>
+  今回作ったのは、DBをAIの「記憶」として使い、
+  複数のAIが協力してソフトウェア設計を進めるシミュレーションです。
+</p>
+<p>
+  CEOとの対話や.pyファイル生成など、まだ入れられなかった機能はありますが、
+  基本の流れ（配分→議論→チェック→監査→修正）は動くところまで作れました。
+</p>
+
+</body>
+</html>
