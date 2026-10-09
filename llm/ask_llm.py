@@ -69,11 +69,15 @@ def ask_llm(system_prompt, user_prompt):
             
         except RateLimitError as e:
             print(f"{provider_name} がレートリミット（429）に達しました。次のプロバイダーに切り替えます。")
+            _write_log({"time": datetime.now().isoformat(timespec="seconds"), "caller": caller, "provider": provider_name, "error": str(e)})
+            #ログ用
             continue  #ループを続行して次のプロバイダーを試す
             
         except Exception as e:
             print(f"{provider_name} で予期せぬエラーが発生しました: {e}")
             #レートリミット以外でも、APIキー不足などで落ちた場合に次へ行くなら continue
+            _write_log({"time": datetime.now().isoformat(timespec="seconds"), "caller": caller, "provider": provider_name, "error": str(e)})
+            #ログ用
             continue
 
     #すべてのプロバイダーが全滅した場合
