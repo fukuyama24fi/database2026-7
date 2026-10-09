@@ -1,4 +1,19 @@
-﻿from groq import RateLimitError
+﻿import inspect
+import json
+import os
+import time
+from datetime import datetime
+
+LOG_PATH = "logs/llm_calls.jsonl"
+
+def _write_log(record):
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+#ログ用
+
+
+from groq import RateLimitError
 
 from llm.providers import gemini, groq, mistral
 from settings import LLM_MODEL, LLM_PROVIDER
@@ -13,6 +28,9 @@ PROVIDERS = {
 PROVIDER_ORDER = ["groq","mistral","gemini"]
 
 def ask_llm(system_prompt, user_prompt):
+    caller = inspect.currentframe().f_back.f_code.co_name
+    #ログ用
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -32,7 +50,22 @@ def ask_llm(system_prompt, user_prompt):
             
             print(f" {provider_name} ({model_name}) で回答を生成中...")
             
-            return provider.chat(messages, model_name)
+            #元々　return provider.chat(messages, model_name)
+
+            start = time.time()
+            answer = provider.chat(messages, model_name)
+            _write_log({
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "caller": caller,
+                "provider": provider_name,
+                "model": model_name,
+                "seconds": round(time.time() - start, 1),
+                "prompt_chars": len(system_prompt) + len(user_prompt),
+                "system_head": system_prompt[:300],
+                "response": answer,
+            })
+            return answer
+            #ログ用
             
         except RateLimitError as e:
             print(f"{provider_name} がレートリミット（429）に達しました。次のプロバイダーに切り替えます。")
