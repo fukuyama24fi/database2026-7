@@ -7,7 +7,8 @@ LLM_MODEL = {
     #"mistral": "mistral-large-latest",
 
     #実験用
-    "groq": "llama-3.1-8b-instant",
+    #使えなくなったらしい　"groq": "llama-3.1-8b-instant",
+    "groq": "openai/gpt-oss-20b",
     "gemini": "gemini-2.5-flash-lite",
     "mistral": "ministral-3b-latest",
 }
