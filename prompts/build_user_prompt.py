@@ -96,5 +96,5 @@ def build_user_prompt(
 
 {{
   "chat": "...",
-  "design_update": "..."
+  "design_update": {{"項目名": "値"}}
 }}"""
