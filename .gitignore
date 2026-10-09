@@ -22,3 +22,5 @@ structure.txt
 
 # VS Codeの個人設定（settings.json だけ共有したい場合は下記をコメントアウト）
 .vscode/
+
+logs/
