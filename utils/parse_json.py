@@ -438,12 +438,17 @@ def read_member_json(raw):
         chat = chat[:CHAT_MAX_CHARS]
 
     design = data.get("design_update", "")
-    if isinstance(design, list):
-        design = "\n".join(str(item) for item in design)
+    if isinstance(design, dict):
+        design = json.dumps(design, ensure_ascii=False, indent=2)
+    elif isinstance(design,list):
+        if all(isinstance(item, str) for item in design):
+            design = "\n".join(design)
+        else:
+            design = json.dumps(design, ensure_ascii=False, indent=2)
     elif design is None:
         design = ""
     else:
-        design = remove_markdown(str(design))
+        design = str(design)
 
     if not chat and not design:
         return None

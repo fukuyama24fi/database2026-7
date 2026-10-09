@@ -79,7 +79,7 @@ def build_user_prompt(
 
 【成果物の書き方(design.txt / design_update)】
 - 議論の本体は design_update に書く。chat は「何を更新したか」の報告のみ(最大{CHAT_MAX_CHARS}字)
-- design_update は design.txt の最新版全文(1つの統一フォーマット)。Markdown見出し形式を推奨
+- design_update は design.txt の最新版全文を、JSONオブジェクトで書く(文字列にしない。Markdownは使わない)
 - 「# 追記・修正」など履歴セクションは書かない(旧版はシステムが design_history.txt に自動保存)
 - 既存 design.txt をベースに、自分の担当範囲を反映した完全版を毎回出力すること
 - 毎ターン、1つ以上の具体項目を追加・修正すること(空文字 "" は不可)
@@ -92,7 +92,7 @@ def build_user_prompt(
 {JSON_FORMAT_RULES}
 {MEMBER_JSON_EXAMPLE}
 - chat: 最大{CHAT_MAX_CHARS}字・1行のみ・改行不可
-- design_update: design.txt の新しい全文(JSON文字列内で改行可。値はすべて "" で囲む)
+- design_update: design.txt の新しい全文(JSONオブジェクト。中の値はすべて "" で囲む)
 
 {{
   "chat": "...",

@@ -15,7 +15,7 @@ JSON_FORMAT_RULES = """
 
 MEMBER_JSON_EXAMPLE = """
 ⭕ メンバー出力OK例:
-{"chat": "レイアウト座標をdesignに反映", "design_update": "レイアウト\\n入力部座標: \\"100px\\", \\"280px\\""}
+{"chat": "レイアウト座標をdesignに反映", "design_update": {"login_form:{"email_input":{"width": "350px", "height": "50px"}}}}
 """
 
 CQO_JSON_EXAMPLE = """

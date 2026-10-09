@@ -1,0 +1,90 @@
+Date : 2026-09-25 16:20:52
+Directory : c:\Users\fukuyama yoshika\Documents\datebase
+Total : 49 files,  4592 codes, 387 comments, 698 blanks, all 5677 lines
+
+Languages
++------------------+------------+------------+------------+------------+------------+
+| language         | files      | code       | comment    | blank      | total      |
++------------------+------------+------------+------------+------------+------------+
+| Python           |         46 |      3,757 |        377 |        614 |      4,748 |
+| HTML             |          2 |        796 |         10 |         84 |        890 |
+| pip requirements |          1 |         39 |          0 |          0 |         39 |
++------------------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                             | files      | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                |         49 |      4,592 |        387 |        698 |      5,677 |
+| . (Files)                                                                        |          3 |        207 |         12 |         37 |        256 |
+| data                                                                             |          5 |        422 |          9 |         12 |        443 |
+| db                                                                               |          5 |        552 |        109 |         85 |        746 |
+| docs                                                                             |          1 |        398 |          5 |         42 |        445 |
+| llm                                                                              |          6 |         77 |          5 |         35 |        117 |
+| llm (Files)                                                                      |          2 |         30 |          5 |         14 |         49 |
+| llm\providers                                                                    |          4 |         47 |          0 |         21 |         68 |
+| meeting                                                                          |          7 |        679 |         27 |         96 |        802 |
+| memory                                                                           |          3 |         88 |         14 |         18 |        120 |
+| prompts                                                                          |          4 |        133 |         26 |         20 |        179 |
+| report                                                                           |          1 |        398 |          5 |         42 |        445 |
+| roles                                                                            |          5 |        711 |        108 |        119 |        938 |
+| seed                                                                             |          6 |        320 |         37 |         79 |        436 |
+| utils                                                                            |          2 |        388 |         16 |         62 |        466 |
+| workspace                                                                        |          1 |        219 |         14 |         51 |        284 |
++----------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| filename                                                                         | language         | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| c:\Users\fukuyama yoshika\Documents\datebase\data\__init__.py                    | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\data\departments.py                 | Python           |         13 |          0 |          1 |         14 |
+| c:\Users\fukuyama yoshika\Documents\datebase\data\names.py                       | Python           |         64 |          1 |          1 |         66 |
+| c:\Users\fukuyama yoshika\Documents\datebase\data\personalities.py               | Python           |        234 |          7 |          8 |        249 |
+| c:\Users\fukuyama yoshika\Documents\datebase\data\skills.py                      | Python           |        111 |          1 |          1 |        113 |
+| c:\Users\fukuyama yoshika\Documents\datebase\db\__init__.py                      | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\db\connect.py                       | Python           |         10 |          1 |          4 |         15 |
+| c:\Users\fukuyama yoshika\Documents\datebase\db\create_tables.py                 | Python           |        152 |         17 |         22 |        191 |
+| c:\Users\fukuyama yoshika\Documents\datebase\db\read.py                          | Python           |        155 |         43 |         29 |        227 |
+| c:\Users\fukuyama yoshika\Documents\datebase\db\write.py                         | Python           |        235 |         48 |         29 |        312 |
+| c:\Users\fukuyama yoshika\Documents\datebase\docs\index.html                     | HTML             |        398 |          5 |         42 |        445 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\__init__.py                     | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\ask_llm.py                      | Python           |         30 |          5 |         13 |         48 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\providers\__init__.py           | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\providers\gemini.py             | Python           |         23 |          0 |          9 |         32 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\providers\groq.py               | Python           |         11 |          0 |          4 |         15 |
+| c:\Users\fukuyama yoshika\Documents\datebase\llm\providers\mistral.py            | Python           |         13 |          0 |          7 |         20 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\__init__.py                 | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\department_meeting.py       | Python           |        117 |          2 |         17 |        136 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\manager_conflict_meeting.py | Python           |        147 |          3 |         34 |        184 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\member_turn.py              | Python           |         57 |          1 |          8 |         66 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\partial_rollback.py         | Python           |         84 |          7 |         17 |        108 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\run_one_department.py       | Python           |        255 |          7 |          8 |        270 |
+| c:\Users\fukuyama yoshika\Documents\datebase\meeting\top_meeting.py              | Python           |         19 |          7 |         11 |         37 |
+| c:\Users\fukuyama yoshika\Documents\datebase\memory\__init__.py                  | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\memory\find_decisions_from_log.py   | Python           |         47 |          9 |          8 |         64 |
+| c:\Users\fukuyama yoshika\Documents\datebase\memory\make_summary.py              | Python           |         41 |          5 |          9 |         55 |
+| c:\Users\fukuyama yoshika\Documents\datebase\prompts\__init__.py                 | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\prompts\build_system_prompt.py      | Python           |         42 |          1 |          8 |         51 |
+| c:\Users\fukuyama yoshika\Documents\datebase\prompts\build_user_prompt.py        | Python           |         70 |         24 |          7 |        101 |
+| c:\Users\fukuyama yoshika\Documents\datebase\prompts\json_format_rules.py        | Python           |         21 |          1 |          4 |         26 |
+| c:\Users\fukuyama yoshika\Documents\datebase\report\report.html                  | HTML             |        398 |          5 |         42 |        445 |
+| c:\Users\fukuyama yoshika\Documents\datebase\requirements.txt                    | pip requirements |         39 |          0 |          0 |         39 |
+| c:\Users\fukuyama yoshika\Documents\datebase\roles\__init__.py                   | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\roles\cqo.py                        | Python           |        272 |         28 |         44 |        344 |
+| c:\Users\fukuyama yoshika\Documents\datebase\roles\cto.py                        | Python           |        103 |         23 |         21 |        147 |
+| c:\Users\fukuyama yoshika\Documents\datebase\roles\manager.py                    | Python           |        159 |         21 |         24 |        204 |
+| c:\Users\fukuyama yoshika\Documents\datebase\roles\pm.py                         | Python           |        177 |         36 |         29 |        242 |
+| c:\Users\fukuyama yoshika\Documents\datebase\run_project.py                      | Python           |        162 |          7 |         34 |        203 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\__init__.py                    | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\make_employees.py              | Python           |         46 |          3 |          9 |         58 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\make_leaders.py                | Python           |         74 |          4 |         13 |         91 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\personas.py                    | Python           |         66 |          9 |         13 |         88 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\run_seed.py                    | Python           |         23 |          0 |         10 |         33 |
+| c:\Users\fukuyama yoshika\Documents\datebase\seed\writer.py                      | Python           |        111 |         21 |         33 |        165 |
+| c:\Users\fukuyama yoshika\Documents\datebase\settings.py                         | Python           |          6 |          5 |          3 |         14 |
+| c:\Users\fukuyama yoshika\Documents\datebase\utils\__init__.py                   | Python           |          0 |          0 |          1 |          1 |
+| c:\Users\fukuyama yoshika\Documents\datebase\utils\parse_json.py                 | Python           |        388 |         16 |         61 |        465 |
+| c:\Users\fukuyama yoshika\Documents\datebase\workspace\io.py                     | Python           |        219 |         14 |         51 |        284 |
+| Total                                                                            |                  |      4,592 |        387 |        698 |      5,677 |
++----------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
