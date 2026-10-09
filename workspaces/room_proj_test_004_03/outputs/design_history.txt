@@ -1,0 +1,579 @@
+===== design revision 2026-10-09 15:34:55 by Matthew Anderson =====
+note: login_screen layoutを更新
+--- previous design.txt ---
+(empty)
+--- replaced with ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666"
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:35:36 by Susan Williams =====
+note: 状態管理とAPI連携をdesignに反映
+--- previous design.txt ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666"
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666"
+        }
+      }
+    }
+  },
+  "state": {
+    "username": "",
+    "password": "",
+    "loading": "false",
+    "error_message": "",
+    "access_token": "",
+    "refresh_token": ""
+  },
+  "api": {
+    "login_endpoint": "/api/auth/login"
+  }
+}
+===== design revision 2026-10-09 15:36:23 by Matthew Anderson =====
+note: レイアウトとアクセシビリティを追加しました
+--- previous design.txt ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666"
+        }
+      }
+    }
+  },
+  "state": {
+    "username": "",
+    "password": "",
+    "loading": "false",
+    "error_message": "",
+    "access_token": "",
+    "refresh_token": ""
+  },
+  "api": {
+    "login_endpoint": "/api/auth/login"
+  }
+}
+--- replaced with ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "max_width": "100%",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)",
+        "padding": "24px"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px",
+        "alt_text": "アプリロゴ"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "ユーザー名入力欄"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "パスワード入力欄"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666",
+          "opacity": "0.6"
+        },
+        "focus_outline": "none"
+      }
+    }
+  },
+  "state": {
+    "username": "",
+    "password": "",
+    "loading": "false",
+    "error_message": "",
+    "access_token": "",
+    "refresh_token": ""
+  },
+  "api": {
+    "login_endpoint": "/api/auth/login"
+  }
+}
+===== design revision 2026-10-09 15:37:12 by Susan Williams =====
+note: フォーム入力検証とログインAPI連携の状態管理を追加しました
+--- previous design.txt ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "max_width": "100%",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)",
+        "padding": "24px"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px",
+        "alt_text": "アプリロゴ"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "ユーザー名入力欄"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "パスワード入力欄"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666",
+          "opacity": "0.6"
+        },
+        "focus_outline": "none"
+      }
+    }
+  },
+  "state": {
+    "username": "",
+    "password": "",
+    "loading": "false",
+    "error_message": "",
+    "access_token": "",
+    "refresh_token": ""
+  },
+  "api": {
+    "login_endpoint": "/api/auth/login"
+  }
+}
+--- replaced with ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "max_width": "100%",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)",
+        "padding": "24px"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px",
+        "alt_text": "アプリロゴ"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "ユーザー名入力欄"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください",
+            "style": {
+              "width": "100%",
+              "height": "48px",
+              "border": "1px solid #cccccc",
+              "border_radius": "4px",
+              "padding": "0 12px",
+              "margin_bottom": "12px",
+              "focus_outline": "2px solid #0066FF"
+            },
+            "aria_label": "パスワード入力欄"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "text_color": "#666666",
+          "opacity": "0.6"
+        },
+        "focus_outline": "none"
+      }
+    }
+  },
+  "state": {
+    "username": "",
+    "password": "",
+    "loading": "false",
+    "isAuthenticated": "false",
+    "form_valid": "false",
+    "login_error": "",
+    "access_token": "",
+    "refresh_token": "",
+    "token_expiry": ""
+  },
+  "api": {
+    "login_endpoint": "/api/auth/login",
+    "refresh_endpoint": "/api/auth/refresh",
+    "logout_endpoint": "/api/auth/logout"
+  }
+}

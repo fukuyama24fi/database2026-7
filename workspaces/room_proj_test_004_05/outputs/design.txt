@@ -1,0 +1,171 @@
+{
+  "test_cases": {
+    "integration_login_ui": [
+      {
+        "name": "レートリミット超過時のUI通知検証",
+        "description": "APIレートリミット（1分間10リクエスト）超過時、UI側でエラーアイコン（⚠️）と背景色（#ffebee）を表示し、エラーメッセージ「リクエスト数上限を超過しました」を表示。エラーアイコンはフォーム上部に固定表示、背景色はログインボタンを1秒間変化させる。",
+        "steps": [
+          {
+            "step": "1分以内に11回ログインAPIを送信 → UIエラー通知（アイコン + 背景色変化）",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "error_icon",
+                  "position": "form_top_center",
+                  "size": "24px",
+                  "color": "#FF5252",
+                  "duration": "1s"
+                },
+                {
+                  "type": "background_color",
+                  "element": "login_button",
+                  "color": "#ffebee",
+                  "duration": "1s"
+                },
+                {
+                  "type": "error_message",
+                  "text": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "position": "form_center",
+                  "font_size": "14px",
+                  "color": "#673AB7"
+                }
+              ],
+              "status": "429",
+              "body": {
+                "error": "RateLimitExceeded",
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            }
+          },
+          {
+            "step": "正常リクエスト（1分以内に10回以内） → UI無反応",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token",
+                "refresh_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Cypress",
+        "setup": {
+          "api_endpoint": "/api/auth/login",
+          "rate_limit_config": {
+            "window_seconds": 60,
+            "max_requests": 10
+          },
+          "ui_components": {
+            "error_icon": "⚠️",
+            "login_button": "login-form__submit-button"
+          }
+        }
+      },
+      {
+        "name": "トップページ遷移時のエラーメッセージ検証",
+        "description": "ログイン失敗時、トップページ遷移後にエラーメッセージ要素（位置・フォントサイズ・背景色）を表示。エラーアイコン（❌）を左上に配置、メッセージを中段に表示、背景色を#ffebeeに設定。フォントサイズは14px、メッセージは「ログインに失敗しました」を表示。",
+        "steps": [
+          {
+            "step": "無効なユーザー名/パスワードでログイン → トップページ遷移後エラーメッセージ表示",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "error_icon",
+                  "position": "top_left",
+                  "size": "24px",
+                  "color": "#FF5252"
+                },
+                {
+                  "type": "error_message",
+                  "text": "ログインに失敗しました",
+                  "position": "center",
+                  "font_size": "14px",
+                  "color": "#673AB7",
+                  "background_color": "#ffebee",
+                  "padding": "12px"
+                }
+              ],
+              "status": "401",
+              "body": {
+                "error": "AuthenticationFailed",
+                "message": "認証エラー"
+              }
+            }
+          },
+          {
+            "step": "正常ログイン → トップページ遷移後エラーメッセージ非表示",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Playwright",
+        "setup": {
+          "top_page_components": {
+            "error_icon": ".login-failed-icon",
+            "error_message": ".login-error-message"
+          }
+        }
+      },
+      {
+        "name": "非同期エラー時のUIタイムアウト検証",
+        "description": "ログインAPIの非同期エラー（例：ネットワーク切断）時、UI側で2秒以内にタイムアウト通知（ダイアログ表示）を表示。ダイアログは「ログインに失敗しました」を表示し、ボタンでキャンセル可能。",
+        "steps": [
+          {
+            "step": "API非同期エラー発生 → UIタイムアウト通知（2秒以内）",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "timeout_dialog",
+                  "text": "ログインに失敗しました",
+                  "position": "center",
+                  "timeout": "2000ms",
+                  "cancel_button": true
+                }
+              ],
+              "status": "500",
+              "body": {
+                "error": "NetworkError",
+                "message": "サーバーとの通信に失敗しました"
+              }
+            }
+          },
+          {
+            "step": "正常APIレスポンス → UIタイムアウト非表示",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Selenium",
+        "setup": {
+          "dialog_components": {
+            "timeout_dialog": "login-timeout-modal"
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "レートリミット超過時のUI通知（エラーアイコン + 背景色変化）",
+      "トップページ遷移時のエラーメッセージ（位置・フォントサイズ・背景色）",
+      "非同期エラー時のUIタイムアウト（2秒以内）",
+      "API返却体とUIの連携（エラーメッセージ統合）",
+      "ログイン成功時のトークン検証（access_token/refresh_tokenの正当性確認）",
+      "セッションタイムアウト時のUI通知（トップページ警告メッセージ）"
+    ],
+    "test_files": [
+      "test_rate_limit_ui.py",
+      "test_error_message_display.py",
+      "test_async_timeout.py"
+    ]
+  }
+}

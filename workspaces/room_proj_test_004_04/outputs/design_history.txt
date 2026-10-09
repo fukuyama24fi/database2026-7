@@ -1,0 +1,5418 @@
+===== design revision 2026-10-09 15:38:31 by Emma Thompson =====
+note: パスワードハッシュ化（BCrypt）とCSRFトークン保護の仕様を追加。BE側のAPI仕様に合わせ、ハッシュ化方法とCSRFトークンの取得/検証手順を定義。ユーザー登録時のパスワードハッシュ化、ログイン時のCSRFトークンの要求/検証を実装に反映。
+--- previous design.txt ---
+(empty)
+--- replaced with ---
+{
+  "models": {
+    "User": {
+      "fields": [
+        {
+          "name": "hashed_password",
+          "type": "string",
+          "required": "true",
+          "notes": "BCryptでハッシュ化（コストワークファクター: 12）"
+        },
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "false",
+          "notes": "CSRFトークン（32文字ランダム生成）を保存"
+        }
+      ]
+    }
+  },
+  "api_spec": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "response_body": {
+            "access_token": "string",
+            "refresh_token": "string",
+            "expires_in": "integer"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": "true"
+          }
+        },
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "response_body": {
+            "message": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": "true"
+          }
+        }
+      ]
+    }
+  },
+  "validation": {
+    "LoginRequest": {
+      "fields": [
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "true",
+          "regex": "^[a-zA-Z0-9]{32}$"
+        }
+      ]
+    },
+    "RegisterRequest": {
+      "fields": [
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "true",
+          "regex": "^[a-zA-Z0-9]{32}$"
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost": 12
+    },
+    "csrf_protection": {
+      "token_length": 32,
+      "token_generation": "random_hex",
+      "token_storage": "user_model"
+    }
+  }
+}
+===== design revision 2026-10-09 15:38:37 by Robert Ramirez =====
+note: レートリミット設定を追加。/api/auth/loginと/api/auth/refreshのリクエスト数制限を1分間100回まで、リクエスト間隔制限を1秒間1回まで実装。エラーレスポンスに"リクエスト数上限を超過しました"を追加。
+--- previous design.txt ---
+{
+  "models": {
+    "User": {
+      "fields": [
+        {
+          "name": "hashed_password",
+          "type": "string",
+          "required": "true",
+          "notes": "BCryptでハッシュ化（コストワークファクター: 12）"
+        },
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "false",
+          "notes": "CSRFトークン（32文字ランダム生成）を保存"
+        }
+      ]
+    }
+  },
+  "api_spec": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "response_body": {
+            "access_token": "string",
+            "refresh_token": "string",
+            "expires_in": "integer"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": "true"
+          }
+        },
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "response_body": {
+            "message": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": "true"
+          }
+        }
+      ]
+    }
+  },
+  "validation": {
+    "LoginRequest": {
+      "fields": [
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "true",
+          "regex": "^[a-zA-Z0-9]{32}$"
+        }
+      ]
+    },
+    "RegisterRequest": {
+      "fields": [
+        {
+          "name": "csrf_token",
+          "type": "string",
+          "required": "true",
+          "regex": "^[a-zA-Z0-9]{32}$"
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost": 12
+    },
+    "csrf_protection": {
+      "token_length": 32,
+      "token_generation": "random_hex",
+      "token_storage": "user_model"
+    }
+  }
+}
+--- replaced with ---
+{
+  "security_config": {
+    "rate_limits": {
+      "login_endpoint": {
+        "max_requests": 100,
+        "interval": "60s",
+        "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+      },
+      "refresh_endpoint": {
+        "max_requests": 100,
+        "interval": "60s",
+        "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+      },
+      "request_interval": {
+        "login": "1s",
+        "refresh": "1s"
+      }
+    },
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string",
+              "csrf_token": "string"
+            },
+            "response_body": {
+              "access_token": "string",
+              "refresh_token": "string",
+              "expires_in": "integer"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "csrf_validation": "true",
+              "rate_limit": {
+                "enabled": "true",
+                "config": "security_config.rate_limits.login_endpoint"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "response_body": {
+              "access_token": "string",
+              "expires_in": "integer"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "csrf_validation": "true",
+              "rate_limit": {
+                "enabled": "true",
+                "config": "security_config.rate_limits.refresh_endpoint"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:38:47 by Emma Thompson =====
+note: CSRFトークンの生成・検証手順を明確化し、BE側のAPI仕様に対応。トークンの生成ロジックとCSRFトークンの取得/検証フローを追加。
+--- previous design.txt ---
+{
+  "security_config": {
+    "rate_limits": {
+      "login_endpoint": {
+        "max_requests": 100,
+        "interval": "60s",
+        "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+      },
+      "refresh_endpoint": {
+        "max_requests": 100,
+        "interval": "60s",
+        "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+      },
+      "request_interval": {
+        "login": "1s",
+        "refresh": "1s"
+      }
+    },
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string",
+              "csrf_token": "string"
+            },
+            "response_body": {
+              "access_token": "string",
+              "refresh_token": "string",
+              "expires_in": "integer"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "csrf_validation": "true",
+              "rate_limit": {
+                "enabled": "true",
+                "config": "security_config.rate_limits.login_endpoint"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "response_body": {
+              "access_token": "string",
+              "expires_in": "integer"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "csrf_validation": "true",
+              "rate_limit": {
+                "enabled": "true",
+                "config": "security_config.rate_limits.refresh_endpoint"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "security_config": {
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session"
+      },
+      "validation_rules": [
+        {
+          "endpoint": "/api/auth/login",
+          "required_fields": [
+            "csrf_token"
+          ],
+          "validation_method": "header",
+          "error_message": "CSRFトークンが無効または期限切れです"
+        },
+        {
+          "endpoint": "/api/auth/refresh",
+          "required_fields": [
+            "csrf_token"
+          ],
+          "validation_method": "header",
+          "error_message": "CSRFトークンが無効または期限切れです"
+        }
+      ]
+    },
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost_factor": 12,
+      "validation": {
+        "min_length": 8,
+        "requirements": [
+          {
+            "type": "uppercase",
+            "count": 1
+          },
+          {
+            "type": "lowercase",
+            "count": 1
+          },
+          {
+            "type": "digit",
+            "count": 1
+          },
+          {
+            "type": "special",
+            "count": 1
+          }
+        ],
+        "error_message": "パスワードは8文字以上で大小文字・数字・特殊文字を含めてください"
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.login_endpoint"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.refresh_endpoint"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:38:56 by Robert Ramirez =====
+note: レートリミット設定を詳細化し、APIエンドポイントごとの制限値・トリガー条件を明確化。CSRFトークンとの連携も追加。
+--- previous design.txt ---
+{
+  "security_config": {
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session"
+      },
+      "validation_rules": [
+        {
+          "endpoint": "/api/auth/login",
+          "required_fields": [
+            "csrf_token"
+          ],
+          "validation_method": "header",
+          "error_message": "CSRFトークンが無効または期限切れです"
+        },
+        {
+          "endpoint": "/api/auth/refresh",
+          "required_fields": [
+            "csrf_token"
+          ],
+          "validation_method": "header",
+          "error_message": "CSRFトークンが無効または期限切れです"
+        }
+      ]
+    },
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost_factor": 12,
+      "validation": {
+        "min_length": 8,
+        "requirements": [
+          {
+            "type": "uppercase",
+            "count": 1
+          },
+          {
+            "type": "lowercase",
+            "count": 1
+          },
+          {
+            "type": "digit",
+            "count": 1
+          },
+          {
+            "type": "special",
+            "count": 1
+          }
+        ],
+        "error_message": "パスワードは8文字以上で大小文字・数字・特殊文字を含めてください"
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.login_endpoint"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.refresh_endpoint"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "security_config": {
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session",
+        "validation_method": "header",
+        "field_name": "X-CSRF-Token"
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.login_endpoint",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.refresh_endpoint",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:39:11 by Emma Thompson =====
+note: パスワードハッシュ化ロジックの詳細化とユーザー登録時のハッシュ化フローを追加。CSRFトークンの生成・検証ロジックをBE側のAPI仕様に完全対応させた。
+--- previous design.txt ---
+{
+  "security_config": {
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session",
+        "validation_method": "header",
+        "field_name": "X-CSRF-Token"
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.login_endpoint",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": "true",
+              "config": "security_config.rate_limits.refresh_endpoint",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "security_config": {
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost_factor": 12,
+      "storage": "database",
+      "validation_method": "on_login_attempt",
+      "error_status": 401,
+      "error_message": "パスワードが不正です。再入力してください",
+      "user_model_fields": [
+        {
+          "name": "hashed_password",
+          "type": "string",
+          "validation": {
+            "min_length": 32,
+            "regex": "^[a-zA-Z0-9@#$%^&*+=!]{32}$"
+          }
+        }
+      ]
+    },
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session",
+        "validation_method": "header",
+        "field_name": "X-CSRF-Token",
+        "validation_rules": [
+          {
+            "name": "token_expiry",
+            "condition": "token_created_at + 15m < current_time",
+            "error_status": 403,
+            "error_message": "CSRFトークンが期限切れです"
+          },
+          {
+            "name": "token_missing",
+            "condition": "csrf_token not in request.headers",
+            "error_status": 403,
+            "error_message": "CSRFトークンが送信されていません"
+          }
+        ]
+      }
+    },
+    "user_registration_flow": {
+      "password_validation": {
+        "required": true,
+        "rules": [
+          {
+            "name": "length",
+            "min": 8,
+            "max": 64,
+            "error_message": "パスワードは8〜64文字で構成してください"
+          },
+          {
+            "name": "complexity",
+            "requirements": [
+              {
+                "type": "uppercase",
+                "count": 1
+              },
+              {
+                "type": "lowercase",
+                "count": 1
+              },
+              {
+                "type": "digit",
+                "count": 1
+              },
+              {
+                "type": "special",
+                "count": 1
+              }
+            ],
+            "error_message": "パスワードに大文字・小文字・数字・特殊文字を1つずつ含めてください"
+          }
+        ]
+      },
+      "hashing_process": {
+        "steps": [
+          {
+            "step": "input_validation",
+            "description": "パスワードの長さ・複雑性チェックを実施"
+          },
+          {
+            "step": "hash_generation",
+            "description": "bcryptハッシュ化（cost_factor=12）を実施",
+            "implementation": {
+              "python": {
+                "library": "bcrypt",
+                "function": "hashpw",
+                "args": [
+                  "plain_password",
+                  "cost=12"
+                ]
+              }
+            }
+          },
+          {
+            "step": "storage",
+            "description": "生成されたハッシュをユーザーモデルのhashed_passwordフィールドに保存"
+          }
+        ]
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.register_endpoint",
+              "error_status": 429,
+              "error_message": "レジスターリクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "レジスターリクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:39:22 by Robert Ramirez =====
+note: レートリミット設定をAPIエンドポイントごとの詳細化・エラーハンドリング強化を追加。CSRFトークンとの連携も明確化した。
+--- previous design.txt ---
+{
+  "security_config": {
+    "password_hashing": {
+      "algorithm": "bcrypt",
+      "cost_factor": 12,
+      "storage": "database",
+      "validation_method": "on_login_attempt",
+      "error_status": 401,
+      "error_message": "パスワードが不正です。再入力してください",
+      "user_model_fields": [
+        {
+          "name": "hashed_password",
+          "type": "string",
+          "validation": {
+            "min_length": 32,
+            "regex": "^[a-zA-Z0-9@#$%^&*+=!]{32}$"
+          }
+        }
+      ]
+    },
+    "csrf_protection": {
+      "token_generation": {
+        "algorithm": "HMAC-SHA256",
+        "secret_key": "env:CSRF_SECRET_KEY",
+        "lifetime": "15m",
+        "storage": "session",
+        "validation_method": "header",
+        "field_name": "X-CSRF-Token",
+        "validation_rules": [
+          {
+            "name": "token_expiry",
+            "condition": "token_created_at + 15m < current_time",
+            "error_status": 403,
+            "error_message": "CSRFトークンが期限切れです"
+          },
+          {
+            "name": "token_missing",
+            "condition": "csrf_token not in request.headers",
+            "error_status": 403,
+            "error_message": "CSRFトークンが送信されていません"
+          }
+        ]
+      }
+    },
+    "user_registration_flow": {
+      "password_validation": {
+        "required": true,
+        "rules": [
+          {
+            "name": "length",
+            "min": 8,
+            "max": 64,
+            "error_message": "パスワードは8〜64文字で構成してください"
+          },
+          {
+            "name": "complexity",
+            "requirements": [
+              {
+                "type": "uppercase",
+                "count": 1
+              },
+              {
+                "type": "lowercase",
+                "count": 1
+              },
+              {
+                "type": "digit",
+                "count": 1
+              },
+              {
+                "type": "special",
+                "count": 1
+              }
+            ],
+            "error_message": "パスワードに大文字・小文字・数字・特殊文字を1つずつ含めてください"
+          }
+        ]
+      },
+      "hashing_process": {
+        "steps": [
+          {
+            "step": "input_validation",
+            "description": "パスワードの長さ・複雑性チェックを実施"
+          },
+          {
+            "step": "hash_generation",
+            "description": "bcryptハッシュ化（cost_factor=12）を実施",
+            "implementation": {
+              "python": {
+                "library": "bcrypt",
+                "function": "hashpw",
+                "args": [
+                  "plain_password",
+                  "cost=12"
+                ]
+              }
+            }
+          },
+          {
+            "step": "storage",
+            "description": "生成されたハッシュをユーザーモデルのhashed_passwordフィールドに保存"
+          }
+        ]
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "csrf_token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.register_endpoint",
+              "error_status": 429,
+              "error_message": "レジスターリクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "レジスターリクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "security_config": {
+    "rate_limits": {
+      "config": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "request_method": "POST",
+            "limit": {
+              "requests": 100,
+              "window_seconds": 60,
+              "error_status": 429,
+              "error_message": "ログインリクエスト数上限(1分間100回)を超過しました。1分以内に再試行してください"
+            },
+            "rate_limit_key": "login_requests_per_minute",
+            "concurrent_limits": [
+              {
+                "name": "interval",
+                "limit": 1,
+                "window_seconds": 1,
+                "error_status": 429,
+                "error_message": "ログインリクエスト間隔制限(1秒間1回)を超過しました"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "request_method": "POST",
+            "limit": {
+              "requests": 50,
+              "window_seconds": 60,
+              "error_status": 429,
+              "error_message": "トークンリフレッシュリクエスト数上限(1分間50回)を超過しました。1分以内に再試行してください"
+            },
+            "rate_limit_key": "refresh_requests_per_minute"
+          }
+        ],
+        "storage": "redis",
+        "ttl_seconds": 300,
+        "implementation": {
+          "python": {
+            "library": "redis",
+            "function": "rate_limit",
+            "args": [
+              "request_key",
+              "window_seconds",
+              "limit",
+              "error_status",
+              "error_message"
+            ]
+          }
+        }
+      },
+      "csrf_integration": {
+        "validation_order": [
+          "rate_limit_check",
+          "csrf_token_validation"
+        ],
+        "error_combination": {
+          "status": 429,
+          "message": "CSRFトークンが無効または期限切れで、かつリクエスト数上限を超過しました。再試行してください"
+        }
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.login",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはパスワードが不正です"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト間隔制限を超過しました"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.refresh_token",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "リフレッシュトークンが無効です"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:39:53 by Emma Thompson =====
+note: パスワードハッシュ化ロジックの詳細化とユーザー登録時のハッシュ化フローを追加。BCryptのコストファクター12を明確化し、ユーザー登録APIのハッシュ化ロジックを追加した。
+--- previous design.txt ---
+{
+  "security_config": {
+    "rate_limits": {
+      "config": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "request_method": "POST",
+            "limit": {
+              "requests": 100,
+              "window_seconds": 60,
+              "error_status": 429,
+              "error_message": "ログインリクエスト数上限(1分間100回)を超過しました。1分以内に再試行してください"
+            },
+            "rate_limit_key": "login_requests_per_minute",
+            "concurrent_limits": [
+              {
+                "name": "interval",
+                "limit": 1,
+                "window_seconds": 1,
+                "error_status": 429,
+                "error_message": "ログインリクエスト間隔制限(1秒間1回)を超過しました"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "request_method": "POST",
+            "limit": {
+              "requests": 50,
+              "window_seconds": 60,
+              "error_status": 429,
+              "error_message": "トークンリフレッシュリクエスト数上限(1分間50回)を超過しました。1分以内に再試行してください"
+            },
+            "rate_limit_key": "refresh_requests_per_minute"
+          }
+        ],
+        "storage": "redis",
+        "ttl_seconds": 300,
+        "implementation": {
+          "python": {
+            "library": "redis",
+            "function": "rate_limit",
+            "args": [
+              "request_key",
+              "window_seconds",
+              "limit",
+              "error_status",
+              "error_message"
+            ]
+          }
+        }
+      },
+      "csrf_integration": {
+        "validation_order": [
+          "rate_limit_check",
+          "csrf_token_validation"
+        ],
+        "error_combination": {
+          "status": 429,
+          "message": "CSRFトークンが無効または期限切れで、かつリクエスト数上限を超過しました。再試行してください"
+        }
+      }
+    }
+  },
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.login",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはパスワードが不正です"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト間隔制限を超過しました"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.refresh_token",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "リフレッシュトークンが無効です"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "bcrypt_hashing": {
+              "implementation": {
+                "python": {
+                  "library": "bcrypt",
+                  "function": "hash",
+                  "args": [
+                    "plain_password",
+                    "cost_factor=12"
+                  ]
+                }
+              },
+              "validation": {
+                "error_status": 400,
+                "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+              }
+            },
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.login",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 400,
+              "message": "パスワードハッシュ化に失敗しました"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "hashing_strategy": {
+      "bcrypt": {
+        "default_cost_factor": 12,
+        "validation_check": {
+          "method": "post_hash_verify",
+          "args": [
+            "plain_password",
+            "hashed_password"
+          ],
+          "error_status": 400,
+          "error_message": "パスワードが一致しません"
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:40:04 by Robert Ramirez =====
+note: レートリミット設定をAPIエンドポイントごとの詳細化・エラーハンドリング強化を追加。CSRFトークンとの連携を明確化し、レートリミットロジックを実装可能な具体的仕様に落とし込んだ。
+--- previous design.txt ---
+{
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Register",
+          "path": "/api/auth/register",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "email": "string",
+            "password": "string",
+            "csrf_token": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "bcrypt_hashing": {
+              "implementation": {
+                "python": {
+                  "library": "bcrypt",
+                  "function": "hash",
+                  "args": [
+                    "plain_password",
+                    "cost_factor=12"
+                  ]
+                }
+              },
+              "validation": {
+                "error_status": 400,
+                "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+              }
+            },
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": "security_config.rate_limits.config.login",
+              "error_status": 429,
+              "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 400,
+              "message": "パスワードハッシュ化に失敗しました"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "hashing_strategy": {
+      "bcrypt": {
+        "default_cost_factor": 12,
+        "validation_check": {
+          "method": "post_hash_verify",
+          "args": [
+            "plain_password",
+            "hashed_password"
+          ],
+          "error_status": 400,
+          "error_message": "パスワードが一致しません"
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "bcrypt_hashing": {
+              "implementation": {
+                "python": {
+                  "library": "bcrypt",
+                  "function": "hash",
+                  "args": [
+                    "plain_password",
+                    "cost_factor=12"
+                  ]
+                }
+              },
+              "validation": {
+                "error_status": 400,
+                "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+              }
+            },
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": {
+                "window_seconds": 60,
+                "max_requests": 10,
+                "method_whitelist": [
+                  "POST"
+                ],
+                "error_status": 429,
+                "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                "rate_limits": [
+                  {
+                    "path": "/api/auth/login",
+                    "method": "POST",
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "error_message": "ログインAPIのリクエスト数上限を超過しました"
+                  }
+                ]
+              }
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 400,
+              "message": "パスワードハッシュ化に失敗しました"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string"
+          },
+          "security": {
+            "rate_limit": {
+              "enabled": true,
+              "config": {
+                "window_seconds": 300,
+                "max_requests": 5,
+                "method_whitelist": [
+                  "POST"
+                ],
+                "error_status": 429,
+                "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました。5分以内に再試行してください",
+                "rate_limits": [
+                  {
+                    "path": "/api/auth/refresh",
+                    "method": "POST",
+                    "window_seconds": 300,
+                    "max_requests": 5,
+                    "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました"
+                  }
+                ]
+              }
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "無効なリフレッシュトークンです"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。5分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "rate_limits": {
+      "config": {
+        "window_seconds": 60,
+        "max_requests": 10,
+        "method_whitelist": [
+          "POST"
+        ],
+        "global_error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+        "rate_limits_by_path": {
+          "/api/auth/login": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "error_message": "ログインAPIのリクエスト数上限を超過しました"
+          },
+          "/api/auth/refresh": {
+            "window_seconds": 300,
+            "max_requests": 5,
+            "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました"
+          }
+        }
+      }
+    }
+  },
+  "python_code_snippet": {
+    "rate_limiter": {
+      "library": "ratelimit",
+      "setup": {
+        "install": "pip install ratelimit",
+        "config": {
+          "login_rate": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "method": "POST"
+          },
+          "refresh_rate": {
+            "window_seconds": 300,
+            "max_requests": 5,
+            "method": "POST"
+          }
+        }
+      },
+      "usage": {
+        "login_endpoint": {
+          "decorator": "@ratelimit(window='login_rate', method='POST')",
+          "error_handler": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+          }
+        },
+        "refresh_endpoint": {
+          "decorator": "@ratelimit(window='refresh_rate', method='POST')",
+          "error_handler": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。5分以内に再試行してください"
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:40:15 by Emma Thompson =====
+note: パスワードハッシュ化ロジックの詳細化を完了。ユーザー登録時のハッシュ化フローを追加し、BCryptコストファクター12の実装手順を明確化。CSRFトークンの生成・検証ロジックをAPI仕様に完全対応させた。
+--- previous design.txt ---
+{
+  "api_endpoints": {
+    "auth_server": {
+      "api_endpoints": [
+        {
+          "name": "Login",
+          "path": "/api/auth/login",
+          "method": "POST",
+          "request_body": {
+            "username": "string",
+            "password": "string"
+          },
+          "security": {
+            "hash_method": "bcrypt",
+            "cost_factor": 12,
+            "bcrypt_hashing": {
+              "implementation": {
+                "python": {
+                  "library": "bcrypt",
+                  "function": "hash",
+                  "args": [
+                    "plain_password",
+                    "cost_factor=12"
+                  ]
+                }
+              },
+              "validation": {
+                "error_status": 400,
+                "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+              }
+            },
+            "csrf_validation": {
+              "method": "header",
+              "field_name": "X-CSRF-Token",
+              "error_status": 403,
+              "error_message": "CSRFトークンが無効または期限切れです"
+            },
+            "rate_limit": {
+              "enabled": true,
+              "config": {
+                "window_seconds": 60,
+                "max_requests": 10,
+                "method_whitelist": [
+                  "POST"
+                ],
+                "error_status": 429,
+                "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                "rate_limits": [
+                  {
+                    "path": "/api/auth/login",
+                    "method": "POST",
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "error_message": "ログインAPIのリクエスト数上限を超過しました"
+                  }
+                ]
+              }
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "ユーザー名またはメールアドレスが既に存在します"
+            },
+            {
+              "status": 400,
+              "message": "パスワードハッシュ化に失敗しました"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          ]
+        },
+        {
+          "name": "RefreshToken",
+          "path": "/api/auth/refresh",
+          "method": "POST",
+          "request_body": {
+            "refresh_token": "string"
+          },
+          "security": {
+            "rate_limit": {
+              "enabled": true,
+              "config": {
+                "window_seconds": 300,
+                "max_requests": 5,
+                "method_whitelist": [
+                  "POST"
+                ],
+                "error_status": 429,
+                "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました。5分以内に再試行してください",
+                "rate_limits": [
+                  {
+                    "path": "/api/auth/refresh",
+                    "method": "POST",
+                    "window_seconds": 300,
+                    "max_requests": 5,
+                    "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました"
+                  }
+                ]
+              }
+            }
+          },
+          "error_responses": [
+            {
+              "status": 400,
+              "message": "無効なリフレッシュトークンです"
+            },
+            {
+              "status": 403,
+              "message": "CSRFトークンが無効または期限切れです"
+            },
+            {
+              "status": 429,
+              "message": "リクエスト数上限を超過しました。5分以内に再試行してください"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "security_config": {
+    "rate_limits": {
+      "config": {
+        "window_seconds": 60,
+        "max_requests": 10,
+        "method_whitelist": [
+          "POST"
+        ],
+        "global_error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+        "rate_limits_by_path": {
+          "/api/auth/login": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "error_message": "ログインAPIのリクエスト数上限を超過しました"
+          },
+          "/api/auth/refresh": {
+            "window_seconds": 300,
+            "max_requests": 5,
+            "error_message": "トークンリフレッシュAPIのリクエスト数上限を超過しました"
+          }
+        }
+      }
+    }
+  },
+  "python_code_snippet": {
+    "rate_limiter": {
+      "library": "ratelimit",
+      "setup": {
+        "install": "pip install ratelimit",
+        "config": {
+          "login_rate": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "method": "POST"
+          },
+          "refresh_rate": {
+            "window_seconds": 300,
+            "max_requests": 5,
+            "method": "POST"
+          }
+        }
+      },
+      "usage": {
+        "login_endpoint": {
+          "decorator": "@ratelimit(window='login_rate', method='POST')",
+          "error_handler": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+          }
+        },
+        "refresh_endpoint": {
+          "decorator": "@ratelimit(window='refresh_rate', method='POST')",
+          "error_handler": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。5分以内に再試行してください"
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "validation": {
+                      "error_status": 400,
+                      "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_status": 401,
+                    "error_message": "パスワードが一致しません"
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです"
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "bcrypt_implementation": {
+        "register_user": {
+          "code": {
+            "library": "bcrypt",
+            "function": "hash",
+            "args": [
+              "plain_password",
+              "cost_factor=12"
+            ],
+            "error_handling": {
+              "exception": "bcrypt.GenerateError",
+              "status": 400,
+              "message": "ハッシュ化に失敗しました"
+            }
+          }
+        },
+        "login_user": {
+          "code": {
+            "library": "bcrypt",
+            "function": "checkpw",
+            "args": [
+              "plain_password",
+              "hashed_password"
+            ],
+            "error_handling": {
+              "exception": "bcrypt.CheckpwError",
+              "status": 401,
+              "message": "パスワードが一致しません"
+            }
+          }
+        }
+      },
+      "csrf_token": {
+        "generation": {
+          "algorithm": "SHA-256",
+          "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+          "lifetime": "15m",
+          "python_code": {
+            "import": [
+              "hashlib",
+              "secrets"
+            ],
+            "function": "generate_csrf_token",
+            "args": [
+              "secret_key"
+            ],
+            "return": "bytes(32)"
+          }
+        },
+        "validation": {
+          "python_code": {
+            "import": [
+              "hashlib",
+              "secrets"
+            ],
+            "function": "validate_csrf_token",
+            "args": [
+              "received_token",
+              "secret_key",
+              "lifetime"
+            ],
+            "return": "bool"
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:40:27 by Robert Ramirez =====
+note: レートリミットのAPIエンドポイント全体に統一的な実装仕様を追加。CSRFトークンとの連携を明確化し、レートリミットロジックのエラーハンドリングを強化。レートリミットログの出力条件を追加。
+--- previous design.txt ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "validation": {
+                      "error_status": 400,
+                      "error_message": "パスワードハッシュ化に失敗しました。再試行してください"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_status": 401,
+                    "error_message": "パスワードが一致しません"
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです"
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "bcrypt_implementation": {
+        "register_user": {
+          "code": {
+            "library": "bcrypt",
+            "function": "hash",
+            "args": [
+              "plain_password",
+              "cost_factor=12"
+            ],
+            "error_handling": {
+              "exception": "bcrypt.GenerateError",
+              "status": 400,
+              "message": "ハッシュ化に失敗しました"
+            }
+          }
+        },
+        "login_user": {
+          "code": {
+            "library": "bcrypt",
+            "function": "checkpw",
+            "args": [
+              "plain_password",
+              "hashed_password"
+            ],
+            "error_handling": {
+              "exception": "bcrypt.CheckpwError",
+              "status": 401,
+              "message": "パスワードが一致しません"
+            }
+          }
+        }
+      },
+      "csrf_token": {
+        "generation": {
+          "algorithm": "SHA-256",
+          "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+          "lifetime": "15m",
+          "python_code": {
+            "import": [
+              "hashlib",
+              "secrets"
+            ],
+            "function": "generate_csrf_token",
+            "args": [
+              "secret_key"
+            ],
+            "return": "bytes(32)"
+          }
+        },
+        "validation": {
+          "python_code": {
+            "import": [
+              "hashlib",
+              "secrets"
+            ],
+            "function": "validate_csrf_token",
+            "args": [
+              "received_token",
+              "secret_key",
+              "lifetime"
+            ],
+            "return": "bool"
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_implementation": {
+        "rate_limiter": {
+          "config": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "log_file": "/var/log/auth/rate_limit.log"
+          },
+          "python_code": {
+            "import": [
+              "redis",
+              "logging"
+            ],
+            "function": "setup_rate_limiter",
+            "args": [
+              "redis_host",
+              "redis_port",
+              "rate_limit_key_prefix"
+            ],
+            "return": "rate_limiter_instance"
+          },
+          "error_handling": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+          }
+        },
+        "rate_limit_logging": {
+          "python_code": {
+            "import": [
+              "logging",
+              "datetime"
+            ],
+            "function": "log_rate_limit_violation",
+            "args": [
+              "endpoint",
+              "ip_address",
+              "request_count",
+              "status"
+            ],
+            "return": "void"
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:41:21 by Emma Thompson =====
+note: CSRFトークンの生成・検証ロジックをAPI仕様に完全対応させた。トークンのセキュリティ強化と、CSRFトークンヘッダーの必須チェックを明確化した。
+--- previous design.txt ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "SHA-256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef"
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_implementation": {
+        "rate_limiter": {
+          "config": {
+            "window_seconds": 60,
+            "max_requests": 10,
+            "log_file": "/var/log/auth/rate_limit.log"
+          },
+          "python_code": {
+            "import": [
+              "redis",
+              "logging"
+            ],
+            "function": "setup_rate_limiter",
+            "args": [
+              "redis_host",
+              "redis_port",
+              "rate_limit_key_prefix"
+            ],
+            "return": "rate_limiter_instance"
+          },
+          "error_handling": {
+            "status": 429,
+            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+          }
+        },
+        "rate_limit_logging": {
+          "python_code": {
+            "import": [
+              "logging",
+              "datetime"
+            ],
+            "function": "log_rate_limit_violation",
+            "args": [
+              "endpoint",
+              "ip_address",
+              "request_count",
+              "status"
+            ],
+            "return": "void"
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                },
+                "csrf_validation": {
+                  "method": "header",
+                  "field_name": "X-CSRF-Token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです",
+                  "token_lifetime": "15m",
+                  "token_generation": {
+                    "algorithm": "HMAC-SHA256",
+                    "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                    "token_format": "base64url",
+                    "token_length": 64
+                  },
+                  "token_storage": {
+                    "session_key": "csrf_token",
+                    "storage_type": "redis",
+                    "redis_key_prefix": "auth_csrf:"
+                  },
+                  "token_verification": {
+                    "required_headers": [
+                      "X-CSRF-Token"
+                    ],
+                    "validation_function": {
+                      "python": {
+                        "library": "cryptography.hazmat.primitives.hmac",
+                        "function": "verify",
+                        "args": [
+                          "secret_key",
+                          "token_data",
+                          "expected_token"
+                        ],
+                        "error_status": 403,
+                        "message": "CSRFトークンが無効または期限切れです"
+                      }
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_token_generation": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "token_expiry": "1h",
+                "refresh_token_expiry": "7d",
+                "claims": [
+                  {
+                    "name": "sub",
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  {
+                    "name": "email",
+                    "type": "string",
+                    "description": "User Email"
+                  }
+                ]
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "jwt_verification": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "error_status": 401,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 401,
+                "message": "リフレッシュトークンの検証に失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "csrf_token_management": {
+        "token_generation": {
+          "python_code": {
+            "import": [
+              "base64",
+              "datetime",
+              "hashlib",
+              "cryptography.hazmat.primitives.hmac",
+              "cryptography.hazmat.backends"
+            ],
+            "function": "generate_csrf_token",
+            "args": [
+              "secret_key",
+              "user_id",
+              "ip_address"
+            ],
+            "return": {
+              "token": "string",
+              "expiry": "datetime"
+            },
+            "description": "CSRFトークンの生成と期限設定"
+          }
+        },
+        "token_verification": {
+          "python_code": {
+            "import": [
+              "cryptography.hazmat.primitives.hmac",
+              "cryptography.hazmat.backends"
+            ],
+            "function": "verify_csrf_token",
+            "args": [
+              "secret_key",
+              "token_data",
+              "expected_token",
+              "ip_address"
+            ],
+            "return": {
+              "valid": "boolean",
+              "error": "string"
+            },
+            "description": "CSRFトークンの検証ロジック"
+          }
+        }
+      },
+      "password_hashing": {
+        "hashing_function": {
+          "python_code": {
+            "import": [
+              "bcrypt"
+            ],
+            "function": "hash_password",
+            "args": [
+              "plain_password",
+              "cost_factor"
+            ],
+            "return": "string",
+            "description": "パスワードのハッシュ化"
+          },
+          "verification_function": {
+            "python_code": {
+              "import": [
+                "bcrypt"
+              ],
+              "function": "verify_password",
+              "args": [
+                "plain_password",
+                "hashed_password"
+              ],
+              "return": {
+                "valid": "boolean",
+                "error": "string"
+              },
+              "description": "パスワードの検証"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:42:12 by Robert Ramirez =====
+note: レートリミットのAPIエンドポイント全体に統一的なレートリミットロジックを追加。CSRFトークンとの連携を明確化し、レートリミットログの出力条件を強化。具体的なエラーハンドリングとログ出力ロジックを追加した。
+--- previous design.txt ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                },
+                "user_model": {
+                  "hashed_password": {
+                    "type": "string",
+                    "auto_generate": "true",
+                    "update_rule": {
+                      "on_create": true,
+                      "on_update": false
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                },
+                "csrf_validation": {
+                  "method": "header",
+                  "field_name": "X-CSRF-Token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです",
+                  "token_lifetime": "15m",
+                  "token_generation": {
+                    "algorithm": "HMAC-SHA256",
+                    "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                    "token_format": "base64url",
+                    "token_length": 64
+                  },
+                  "token_storage": {
+                    "session_key": "csrf_token",
+                    "storage_type": "redis",
+                    "redis_key_prefix": "auth_csrf:"
+                  },
+                  "token_verification": {
+                    "required_headers": [
+                      "X-CSRF-Token"
+                    ],
+                    "validation_function": {
+                      "python": {
+                        "library": "cryptography.hazmat.primitives.hmac",
+                        "function": "verify",
+                        "args": [
+                          "secret_key",
+                          "token_data",
+                          "expected_token"
+                        ],
+                        "error_status": 403,
+                        "message": "CSRFトークンが無効または期限切れです"
+                      }
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_token_generation": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "token_expiry": "1h",
+                "refresh_token_expiry": "7d",
+                "claims": [
+                  {
+                    "name": "sub",
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  {
+                    "name": "email",
+                    "type": "string",
+                    "description": "User Email"
+                  }
+                ]
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "jwt_verification": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "error_status": 401,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                    "log_rotation": {
+                      "max_size": "10MB",
+                      "backup_count": 5
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "リフレッシュトークンが無効または期限切れです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 401,
+                "message": "リフレッシュトークンの検証に失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "csrf_token_management": {
+        "token_generation": {
+          "python_code": {
+            "import": [
+              "base64",
+              "datetime",
+              "hashlib",
+              "cryptography.hazmat.primitives.hmac",
+              "cryptography.hazmat.backends"
+            ],
+            "function": "generate_csrf_token",
+            "args": [
+              "secret_key",
+              "user_id",
+              "ip_address"
+            ],
+            "return": {
+              "token": "string",
+              "expiry": "datetime"
+            },
+            "description": "CSRFトークンの生成と期限設定"
+          }
+        },
+        "token_verification": {
+          "python_code": {
+            "import": [
+              "cryptography.hazmat.primitives.hmac",
+              "cryptography.hazmat.backends"
+            ],
+            "function": "verify_csrf_token",
+            "args": [
+              "secret_key",
+              "token_data",
+              "expected_token",
+              "ip_address"
+            ],
+            "return": {
+              "valid": "boolean",
+              "error": "string"
+            },
+            "description": "CSRFトークンの検証ロジック"
+          }
+        }
+      },
+      "password_hashing": {
+        "hashing_function": {
+          "python_code": {
+            "import": [
+              "bcrypt"
+            ],
+            "function": "hash_password",
+            "args": [
+              "plain_password",
+              "cost_factor"
+            ],
+            "return": "string",
+            "description": "パスワードのハッシュ化"
+          },
+          "verification_function": {
+            "python_code": {
+              "import": [
+                "bcrypt"
+              ],
+              "function": "verify_password",
+              "args": [
+                "plain_password",
+                "hashed_password"
+              ],
+              "return": {
+                "valid": "boolean",
+                "error": "string"
+              },
+              "description": "パスワードの検証"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      },
+                      "log_condition": {
+                        "enabled": true,
+                        "threshold": 100,
+                        "log_interval": "1h",
+                        "log_include": [
+                          "error_status=429",
+                          "method=POST"
+                        ]
+                      }
+                    },
+                    "ip_whitelist": [
+                      "192.168.1.0/24",
+                      "10.0.0.0/8"
+                    ],
+                    "rate_limit_function": {
+                      "python": {
+                        "library": "flask_limiter",
+                        "function": "limit",
+                        "args": [
+                          "max=10/minute"
+                        ],
+                        "error_handler": {
+                          "status": 429,
+                          "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                },
+                "csrf_validation": {
+                  "method": "header",
+                  "field_name": "X-CSRF-Token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです",
+                  "token_lifetime": "15m",
+                  "token_generation": {
+                    "algorithm": "HMAC-SHA256",
+                    "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                    "token_format": "base64url",
+                    "token_length": 64
+                  },
+                  "token_storage": {
+                    "session_key": "csrf_token",
+                    "storage_type": "redis",
+                    "redis_key_prefix": "auth_csrf:"
+                  },
+                  "token_verification": {
+                    "required_headers": [
+                      "X-CSRF-Token"
+                    ],
+                    "validation_function": {
+                      "python": {
+                        "library": "cryptography.hazmat.primitives.hmac",
+                        "function": "verify",
+                        "args": [
+                          "secret_key",
+                          "token_data",
+                          "expected_token"
+                        ],
+                        "error_status": 403,
+                        "message": "CSRFトークンが無効または期限切れです"
+                      }
+                    }
+                  },
+                  "rate_limit": {
+                    "enabled": true,
+                    "config": {
+                      "window_seconds": 60,
+                      "max_requests": 10,
+                      "method_whitelist": [
+                        "POST"
+                      ],
+                      "error_status": 429,
+                      "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                      "rate_limit_log": {
+                        "enabled": true,
+                        "log_path": "/var/log/auth/rate_limit.log",
+                        "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                        "log_rotation": {
+                          "max_size": "10MB",
+                          "backup_count": 5
+                        },
+                        "log_condition": {
+                          "enabled": true,
+                          "threshold": 100,
+                          "log_interval": "1h",
+                          "log_include": [
+                            "error_status=429",
+                            "method=POST"
+                          ]
+                        }
+                      },
+                      "ip_whitelist": [
+                        "192.168.1.0/24",
+                        "10.0.0.0/8"
+                      ],
+                      "rate_limit_function": {
+                        "python": {
+                          "library": "flask_limiter",
+                          "function": "limit",
+                          "args": [
+                            "max=10/minute"
+                          ],
+                          "error_handler": {
+                            "status": 429,
+                            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_token_generation": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "token_expiry": "1h",
+                "refresh_token_expiry": "7d",
+                "claims": [
+                  {
+                    "name": "sub",
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  {
+                    "name": "email",
+                    "type": "string",
+                    "description": "User Email"
+                  }
+                ],
+                "token_rotation": {
+                  "enabled": true,
+                  "rotation_interval": "7d",
+                  "new_key_rotation": {
+                    "algorithm": "HS256",
+                    "secret_key": "auth_jwt_secret_key_1234567890abcdef_rotated"
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 5,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      },
+                      "log_condition": {
+                        "enabled": true,
+                        "threshold": 50,
+                        "log_interval": "1h",
+                        "log_include": [
+                          "error_status=429",
+                          "method=POST"
+                        ]
+                      }
+                    },
+                    "ip_whitelist": [
+                      "192.168.1.0/24",
+                      "10.0.0.0/8"
+                    ],
+                    "rate_limit_function": {
+                      "python": {
+                        "library": "flask_limiter",
+                        "function": "limit",
+                        "args": [
+                          "max=5/minute"
+                        ],
+                        "error_handler": {
+                          "status": 429,
+                          "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_verification": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "error_status": 401,
+                "message": "リフレッシュトークンが無効または期限切れです",
+                "token_rotation_check": {
+                  "enabled": true,
+                  "rotation_key": "auth_jwt_secret_key_1234567890abcdef_rotated",
+                  "error_status": 401,
+                  "message": "トークンのキーが切り替わっています。新しいトークンを使用してください"
+                }
+              },
+              "error_responses": [
+                {
+                  "status": 400,
+                  "message": "リフレッシュトークンが無効または期限切れです"
+                },
+                {
+                  "status": 403,
+                  "message": "CSRFトークンが無効または期限切れです"
+                },
+                {
+                  "status": 401,
+                  "message": "リフレッシュトークンの検証に失敗しました"
+                },
+                {
+                  "status": 429,
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                {
+                  "status": 401,
+                  "message": "トークンのキーが切り替わっています。新しいトークンを使用してください"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_manager": {
+        "python_code": {
+          "import": [
+            "flask_limiter",
+            "redis",
+            "datetime",
+            "logging"
+          ],
+          "function": "configure_rate_limit",
+          "args": [
+            "app",
+            "redis_url",
+            "auth_csrf_secret_key",
+            "auth_jwt_secret_key"
+          ],
+          "return": {
+            "rate_limiter": "flask_limiter.Limiter",
+            "redis_client": "redis.Redis",
+            "csrf_secret": "string",
+            "jwt_secret": "string"
+          },
+          "description": "レートリミットとCSRFトークン管理の統合設定"
+        }
+      },
+      "rate_limit_logging": {
+        "python_code": {
+          "import": [
+            "logging",
+            "json"
+          ],
+          "function": "setup_rate_limit_logging",
+          "args": [
+            "log_path",
+            "log_format",
+            "log_rotation"
+          ],
+          "return": {
+            "logger": "logging.Logger"
+          },
+          "description": "レートリミットログの設定と出力ロジック"
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:42:27 by Emma Thompson =====
+note: パスワードハッシュ化ロジックの強化を完了。ユーザー登録時のハッシュ化フローを追加し、BCryptコストファクター12の実装手順を明確化。CSRFトークンとの連携をAPI仕様に統合した。
+--- previous design.txt ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました"
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 10,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      },
+                      "log_condition": {
+                        "enabled": true,
+                        "threshold": 100,
+                        "log_interval": "1h",
+                        "log_include": [
+                          "error_status=429",
+                          "method=POST"
+                        ]
+                      }
+                    },
+                    "ip_whitelist": [
+                      "192.168.1.0/24",
+                      "10.0.0.0/8"
+                    ],
+                    "rate_limit_function": {
+                      "python": {
+                        "library": "flask_limiter",
+                        "function": "limit",
+                        "args": [
+                          "max=10/minute"
+                        ],
+                        "error_handler": {
+                          "status": 429,
+                          "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "verify",
+                    "args": [
+                      "plain_password",
+                      "hashed_password"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.CheckpwError",
+                      "status": 401,
+                      "message": "パスワードが一致しません"
+                    }
+                  }
+                },
+                "csrf_validation": {
+                  "method": "header",
+                  "field_name": "X-CSRF-Token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです",
+                  "token_lifetime": "15m",
+                  "token_generation": {
+                    "algorithm": "HMAC-SHA256",
+                    "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                    "token_format": "base64url",
+                    "token_length": 64
+                  },
+                  "token_storage": {
+                    "session_key": "csrf_token",
+                    "storage_type": "redis",
+                    "redis_key_prefix": "auth_csrf:"
+                  },
+                  "token_verification": {
+                    "required_headers": [
+                      "X-CSRF-Token"
+                    ],
+                    "validation_function": {
+                      "python": {
+                        "library": "cryptography.hazmat.primitives.hmac",
+                        "function": "verify",
+                        "args": [
+                          "secret_key",
+                          "token_data",
+                          "expected_token"
+                        ],
+                        "error_status": 403,
+                        "message": "CSRFトークンが無効または期限切れです"
+                      }
+                    }
+                  },
+                  "rate_limit": {
+                    "enabled": true,
+                    "config": {
+                      "window_seconds": 60,
+                      "max_requests": 10,
+                      "method_whitelist": [
+                        "POST"
+                      ],
+                      "error_status": 429,
+                      "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                      "rate_limit_log": {
+                        "enabled": true,
+                        "log_path": "/var/log/auth/rate_limit.log",
+                        "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                        "log_rotation": {
+                          "max_size": "10MB",
+                          "backup_count": 5
+                        },
+                        "log_condition": {
+                          "enabled": true,
+                          "threshold": 100,
+                          "log_interval": "1h",
+                          "log_include": [
+                            "error_status=429",
+                            "method=POST"
+                          ]
+                        }
+                      },
+                      "ip_whitelist": [
+                        "192.168.1.0/24",
+                        "10.0.0.0/8"
+                      ],
+                      "rate_limit_function": {
+                        "python": {
+                          "library": "flask_limiter",
+                          "function": "limit",
+                          "args": [
+                            "max=10/minute"
+                          ],
+                          "error_handler": {
+                            "status": 429,
+                            "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_token_generation": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "token_expiry": "1h",
+                "refresh_token_expiry": "7d",
+                "claims": [
+                  {
+                    "name": "sub",
+                    "type": "string",
+                    "description": "User ID"
+                  },
+                  {
+                    "name": "email",
+                    "type": "string",
+                    "description": "User Email"
+                  }
+                ],
+                "token_rotation": {
+                  "enabled": true,
+                  "rotation_interval": "7d",
+                  "new_key_rotation": {
+                    "algorithm": "HS256",
+                    "secret_key": "auth_jwt_secret_key_1234567890abcdef_rotated"
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはパスワードが無効です"
+              },
+              {
+                "status": 401,
+                "message": "パスワードが一致しません"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "secret_key",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                },
+                "rate_limit": {
+                  "enabled": true,
+                  "config": {
+                    "window_seconds": 60,
+                    "max_requests": 5,
+                    "method_whitelist": [
+                      "POST"
+                    ],
+                    "error_status": 429,
+                    "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                    "rate_limit_log": {
+                      "enabled": true,
+                      "log_path": "/var/log/auth/rate_limit.log",
+                      "log_format": "timestamp,endpoint,ip_address,request_count,status",
+                      "log_rotation": {
+                        "max_size": "10MB",
+                        "backup_count": 5
+                      },
+                      "log_condition": {
+                        "enabled": true,
+                        "threshold": 50,
+                        "log_interval": "1h",
+                        "log_include": [
+                          "error_status=429",
+                          "method=POST"
+                        ]
+                      }
+                    },
+                    "ip_whitelist": [
+                      "192.168.1.0/24",
+                      "10.0.0.0/8"
+                    ],
+                    "rate_limit_function": {
+                      "python": {
+                        "library": "flask_limiter",
+                        "function": "limit",
+                        "args": [
+                          "max=5/minute"
+                        ],
+                        "error_handler": {
+                          "status": 429,
+                          "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "jwt_verification": {
+                "algorithm": "HS256",
+                "secret_key": "auth_jwt_secret_key_1234567890abcdef",
+                "error_status": 401,
+                "message": "リフレッシュトークンが無効または期限切れです",
+                "token_rotation_check": {
+                  "enabled": true,
+                  "rotation_key": "auth_jwt_secret_key_1234567890abcdef_rotated",
+                  "error_status": 401,
+                  "message": "トークンのキーが切り替わっています。新しいトークンを使用してください"
+                }
+              },
+              "error_responses": [
+                {
+                  "status": 400,
+                  "message": "リフレッシュトークンが無効または期限切れです"
+                },
+                {
+                  "status": 403,
+                  "message": "CSRFトークンが無効または期限切れです"
+                },
+                {
+                  "status": 401,
+                  "message": "リフレッシュトークンの検証に失敗しました"
+                },
+                {
+                  "status": 429,
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                {
+                  "status": 401,
+                  "message": "トークンのキーが切り替わっています。新しいトークンを使用してください"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_manager": {
+        "python_code": {
+          "import": [
+            "flask_limiter",
+            "redis",
+            "datetime",
+            "logging"
+          ],
+          "function": "configure_rate_limit",
+          "args": [
+            "app",
+            "redis_url",
+            "auth_csrf_secret_key",
+            "auth_jwt_secret_key"
+          ],
+          "return": {
+            "rate_limiter": "flask_limiter.Limiter",
+            "redis_client": "redis.Redis",
+            "csrf_secret": "string",
+            "jwt_secret": "string"
+          },
+          "description": "レートリミットとCSRFトークン管理の統合設定"
+        }
+      },
+      "rate_limit_logging": {
+        "python_code": {
+          "import": [
+            "logging",
+            "json"
+          ],
+          "function": "setup_rate_limit_logging",
+          "args": [
+            "log_path",
+            "log_format",
+            "log_rotation"
+          ],
+          "return": {
+            "logger": "logging.Logger"
+          },
+          "description": "レートリミットログの設定と出力ロジック"
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+                    }
+                  }
+                },
+                "password_validation": {
+                  "min_length": 8,
+                  "has_uppercase": true,
+                  "has_lowercase": true,
+                  "has_digit": true,
+                  "has_special": true,
+                  "error_message": "パスワードは8文字以上で、大文字・小文字・数字・特殊文字を含めてください"
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "auth_csrf_secret_key_1234567890abcdef",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=10/minute"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+              },
+              {
+                "status": 400,
+                "message": "パスワードが不適切です"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "register_user_hashing": {
+        "python_code": {
+          "import": [
+            "bcrypt",
+            "redis",
+            "flask_limiter"
+          ],
+          "function": "register_user_with_hashing",
+          "args": [
+            "user_data",
+            "db_session",
+            "csrf_token_manager",
+            "rate_limiter"
+          ],
+          "return": {
+            "status": "int",
+            "message": "str",
+            "user": "dict"
+          },
+          "description": "ユーザー登録時のハッシュ化ロジックとCSRF/レートリミットの統合処理",
+          "code": {
+            "bcrypt_hash": {
+              "plain_password": "plain_password",
+              "cost_factor": 12,
+              "hashed_password": "bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt(rounds=12)).decode()"
+            },
+            "validation_flow": {
+              "password_check": [
+                {
+                  "condition": "len(plain_password) < 8 || not any(c.isupper() for c in plain_password) || ...",
+                  "status": 400,
+                  "message": "パスワードが不適切です"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:42:47 by Robert Ramirez =====
+note: レートリミットのAPIエンドポイント全体に統一的なレートリミットロジックを追加。CSRFトークンとの連携を明確化し、レートリミットログの出力条件を強化。具体的なエラーハンドリングとログ出力ロジックを追加した。
+--- previous design.txt ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Register",
+            "path": "/api/auth/register",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "email": "string",
+              "password": "string"
+            },
+            "security": {
+              "hash_method": "bcrypt",
+              "cost_factor": 12,
+              "bcrypt_hashing": {
+                "implementation": {
+                  "python": {
+                    "library": "bcrypt",
+                    "function": "hash",
+                    "args": [
+                      "plain_password",
+                      "cost_factor=12"
+                    ],
+                    "error_handling": {
+                      "exception": "bcrypt.GenerateError",
+                      "status": 400,
+                      "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+                    }
+                  }
+                },
+                "password_validation": {
+                  "min_length": 8,
+                  "has_uppercase": true,
+                  "has_lowercase": true,
+                  "has_digit": true,
+                  "has_special": true,
+                  "error_message": "パスワードは8文字以上で、大文字・小文字・数字・特殊文字を含めてください"
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                },
+                "token_storage": {
+                  "session_key": "csrf_token",
+                  "storage_type": "redis",
+                  "redis_key_prefix": "auth_csrf:"
+                },
+                "token_verification": {
+                  "required_headers": [
+                    "X-CSRF-Token"
+                  ],
+                  "validation_function": {
+                    "python": {
+                      "library": "cryptography.hazmat.primitives.hmac",
+                      "function": "verify",
+                      "args": [
+                        "auth_csrf_secret_key_1234567890abcdef",
+                        "token_data",
+                        "expected_token"
+                      ],
+                      "error_status": 403,
+                      "message": "CSRFトークンが無効または期限切れです"
+                    }
+                  }
+                }
+              },
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=10/minute"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+              },
+              {
+                "status": 400,
+                "message": "パスワードが不適切です"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 409,
+                "message": "ユーザー登録に失敗しました。重複チェックに失敗しました"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "register_user_hashing": {
+        "python_code": {
+          "import": [
+            "bcrypt",
+            "redis",
+            "flask_limiter"
+          ],
+          "function": "register_user_with_hashing",
+          "args": [
+            "user_data",
+            "db_session",
+            "csrf_token_manager",
+            "rate_limiter"
+          ],
+          "return": {
+            "status": "int",
+            "message": "str",
+            "user": "dict"
+          },
+          "description": "ユーザー登録時のハッシュ化ロジックとCSRF/レートリミットの統合処理",
+          "code": {
+            "bcrypt_hash": {
+              "plain_password": "plain_password",
+              "cost_factor": 12,
+              "hashed_password": "bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt(rounds=12)).decode()"
+            },
+            "validation_flow": {
+              "password_check": [
+                {
+                  "condition": "len(plain_password) < 8 || not any(c.isupper() for c in plain_password) || ...",
+                  "status": 400,
+                  "message": "パスワードが不適切です"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=10/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                        "log_message": "レートリミットエラー: {ip} ({method} {path})"
+                      }
+                    }
+                  },
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "{timestamp} {ip} {method} {path} {status} {latency_ms}",
+                    "threshold": 5,
+                    "log_function": {
+                      "python": {
+                        "library": "logging",
+                        "function": "info",
+                        "args": [
+                          "%s",
+                          "rate_limit_log_format"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+              },
+              {
+                "status": 400,
+                "message": "パスワードが不適切です"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              },
+              {
+                "status": 429,
+                "message": "レートリミットログ出力: {ip} ({method} {path})"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=5/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "none",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "無効なリフレッシュトークンです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "Logout",
+            "path": "/api/auth/logout",
+            "method": "POST",
+            "request_body": {
+              "access_token": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 3,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=3/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "none",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "無効なアクセストークンです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_handler": {
+        "python_code": {
+          "import": [
+            "flask_limiter",
+            "logging",
+            "flask"
+          ],
+          "function": "rate_limit_middleware",
+          "args": [
+            "app",
+            "csrf_token_manager"
+          ],
+          "description": "レートリミットとCSRFトークンの統合中間処理",
+          "code": {
+            "middleware": {
+              "before_request": [
+                {
+                  "check": "flask_limiter.limit_requests",
+                  "args": [
+                    "max=10/minute",
+                    "per_user=true"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                }
+              ],
+              "csrf_check": [
+                {
+                  "check": "csrf_token_manager.verify_token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです"
+                }
+              ],
+              "log_trigger": [
+                {
+                  "check": "flask_limiter.get_rate_limit_exceeded",
+                  "log_condition": "True",
+                  "log_message": "レートリミットエラー: {request.remote_addr} ({request.method} {request.path})"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "rate_limit_logging": {
+        "python_code": {
+          "import": [
+            "logging",
+            "datetime"
+          ],
+          "function": "setup_rate_limit_logger",
+          "args": [],
+          "description": "レートリミットログの設定と出力ロジック",
+          "code": {
+            "logger_config": {
+              "name": "auth_rate_limit_logger",
+              "level": "INFO",
+              "format": "{asctime} {levelname} {message}",
+              "handlers": [
+                {
+                  "type": "FileHandler",
+                  "filename": "/var/log/auth/rate_limit.log",
+                  "mode": "a",
+                  "formatter": "{timestamp} {ip} {method} {path} {status} {latency_ms}"
+                }
+              ]
+            },
+            "log_function": {
+              "trigger": "if request_limits.exceeded > threshold",
+              "log_data": [
+                "request.remote_addr",
+                "request.method",
+                "request.path",
+                "response.status_code",
+                "response_time_ms"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

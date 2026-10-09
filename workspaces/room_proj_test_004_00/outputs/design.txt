@@ -1,0 +1,86 @@
+{
+  "auth_server": {
+    "api_endpoints": [
+      {
+        "name": "Login",
+        "path": "/api/auth/login",
+        "method": "POST",
+        "request_body": {
+          "username": "string",
+          "password": "string"
+        },
+        "response_body": {
+          "access_token": "string",
+          "refresh_token": "string",
+          "expires_in": "integer"
+        }
+      },
+      {
+        "name": "RefreshToken",
+        "path": "/api/auth/refresh",
+        "method": "POST",
+        "request_body": {
+          "refresh_token": "string"
+        },
+        "response_body": {
+          "access_token": "string",
+          "expires_in": "integer"
+        }
+      },
+      {
+        "name": "Logout",
+        "path": "/api/auth/logout",
+        "method": "POST",
+        "request_body": {
+          "access_token": "string"
+        },
+        "response_body": {
+          "message": "string"
+        }
+      }
+    ],
+    "key_management": {
+      "kms_key_arn": "arn:aws:kms:ap-northeast-1:123456789012:key/abcd1234-5678-90ab-cdef-1234567890ab",
+      "iam_role": "arn:aws:iam::123456789012:role/AuthServerKMSAccess",
+      "access_policies": [
+        {
+          "principal": "arn:aws:iam::123456789012:role/AuthServerKMSAccess",
+          "actions": [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:GenerateDataKey"
+          ],
+          "resource": "arn:aws:kms:ap-northeast-1:123456789012:key/abcd1234-5678-90ab-cdef-1234567890ab"
+        }
+      ]
+    },
+    "token_config": {
+      "issuer": "https://auth.example.com",
+      "audience": "example-app",
+      "lifetime": "15m",
+      "refresh_lifetime": "30d",
+      "public_key_url": "https://auth.example.com/.well-known/jwks.json"
+    },
+    "rate_limit": {
+      "requests_per_minute": "1000"
+    },
+    "load_balancer": {
+      "type": "application",
+      "name": "AuthLB",
+      "health_check_path": "/health",
+      "port": "443",
+      "ssl_certificate_arn": "arn:aws:acm:ap-northeast-1:123456789012:certificate/xyz"
+    },
+    "instances": {
+      "min": "2",
+      "max": "5",
+      "launch_template": "AuthServerTemplate",
+      "autoscaling_policy": "scale_out_on_cpu_80"
+    },
+    "session_management": {
+      "type": "stateless",
+      "cookie_policy": "none"
+    },
+    "kms_usage_example": "import boto3\\n\\nkms = boto3.client('kms')\\n\\n# encrypt plaintext\\nplain_text = b'secret'\\nresponse = kms.encrypt(KeyId='arn:aws:kms:ap-northeast-1:123456789012:key/abcd1234-5678-90ab-cdef-1234567890ab', Plaintext=plain_text)\\nencrypted_blob = response['CiphertextBlob']\\n\\n# decrypt\\nresponse = kms.decrypt(CiphertextBlob=encrypted_blob)\\nplain_text = response['Plaintext']"
+  }
+}

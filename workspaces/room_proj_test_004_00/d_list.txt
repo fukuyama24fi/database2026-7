@@ -1,0 +1,39 @@
+[1] id=dec_room_proj_test_004_00_003 turn=6 type=token_config
+  summary: JWT トークン設定を確定
+  rationale: Michael Johnson が issuer, audience, lifetime, refresh_lifetime, public_key_url を決定し、Mary Lewis が承認。design.txt に含まれる。\n
+  confidence: 1.0
+
+[2] id=dec_room_proj_test_004_00_004 turn=6 type=rate_limit
+  summary: レートリミット設定を確定
+  rationale: Michael Johnson が 1000 req/min を追加し、Mary Lewis が確認。設計書に記載。\n
+  confidence: 1.0
+
+[3] id=dec_room_proj_test_004_00_005 turn=6 type=load_balancer
+  summary: ロードバランサー設定を確定
+  rationale: Michael Johnson がアプリケーション LB、名前 AuthLB、ヘルスチェック、SSL 証明書を決定。Mary Lewis が同意。design.txt で定義済み。\n
+  confidence: 1.0
+
+[4] id=dec_room_proj_test_004_00_008 turn=6 type=api_spec
+  summary: 認証サーバーのAPI仕様を確定
+  rationale: Michael Johnson が API エンドポイント（Login, RefreshToken, Logout）を追加し、Mary Lewis が確認した。これらのエンドポイントは design.txt に記載されている。\n
+  confidence: 1.0
+
+[5] id=dec_room_proj_test_004_00_009 turn=6 type=key_management
+  summary: KMS キー管理設定を確定
+  rationale: Michael Johnson が KMS Key ARN、IAM ロール、アクセスポリシーを追加し、Mary Lewis が同意した。設計書にも反映されている。\n
+  confidence: 1.0
+
+[6] id=dec_room_proj_test_004_00_010 turn=6 type=scaling_policy
+  summary: 自動スケーリング設定を確定
+  rationale: Michael Johnson が min 2, max 5, launch_template, autoscaling_policy を追加。Mary Lewis が承認。設計書に反映。\n
+  confidence: 1.0
+
+[7] id=dec_room_proj_test_004_00_011 turn=6 type=session_management
+  summary: ステートレスセッション設定を確定
+  rationale: Michael Johnson が session_management を stateless, cookie_policy none と決定。Mary Lewis が確認。design.txt で明記。\n
+  confidence: 1.0
+
+[8] id=dec_room_proj_test_004_00_012 turn=6 type=kms_usage_example
+  summary: KMS 使用例コードを確定
+  rationale: Michael Johnson が boto3 を用いた encrypt/decrypt のサンプルコードを提供し、Mary Lewis が承認。design.txt に記載。\n
+  confidence: 1.0

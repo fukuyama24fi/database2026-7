@@ -1,0 +1,117 @@
+===== design revision 2026-10-09 15:25:25 by Sophia Brown =====
+note: ログイン画面のレイアウトと入力項目、アクセシビリティ要件を追加しました
+--- previous design.txt ---
+(empty)
+--- replaced with ---
+{
+  "login_screen": {
+    "layout": {
+      "container": {
+        "width": "400px",
+        "height": "auto",
+        "background_color": "#ffffff",
+        "border_radius": "8px",
+        "box_shadow": "0 2px 8px rgba(0,0,0,0.1)"
+      },
+      "logo": {
+        "size": "100px",
+        "margin_bottom": "24px"
+      },
+      "form": {
+        "fields": [
+          {
+            "name": "username",
+            "label": "ユーザー名",
+            "type": "text",
+            "required": "true",
+            "placeholder": "ユーザー名を入力",
+            "validation": {
+              "min_length": "4",
+              "max_length": "20",
+              "regex": "^[a-zA-Z0-9_]+$"
+            },
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          {
+            "name": "password",
+            "label": "パスワード",
+            "type": "password",
+            "required": "true",
+            "placeholder": "パスワードを入力",
+            "validation": {
+              "min_length": "8",
+              "has_uppercase": "true",
+              "has_lowercase": "true",
+              "has_digit": "true",
+              "has_special": "true"
+            },
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        ]
+      },
+      "submit_button": {
+        "text": "ログイン",
+        "width": "100%",
+        "height": "48px",
+        "background_color": "#0066FF",
+        "text_color": "#ffffff",
+        "border_radius": "4px",
+        "disabled_state": {
+          "background_color": "#cccccc",
+          "cursor": "not-allowed"
+        }
+      }
+    },
+    "links": [
+      {
+        "text": "パスワードを忘れた場合",
+        "action": "open_forgot_password_modal",
+        "color": "#0066FF",
+        "hover_color": "#0055CC"
+      }
+    ],
+    "footer": {
+      "text": "© 2026 MyApp",
+      "text_color": "#666666",
+      "font_size": "12px"
+    }
+  },
+  "typography": {
+    "font_family": "\"Helvetica Neue\", Arial, sans-serif",
+    "label_font_size": "14px",
+    "input_font_size": "14px",
+    "button_font_size": "16px",
+    "error_font_size": "12px",
+    "color_primary": "#0066FF",
+    "color_secondary": "#666666",
+    "color_error": "#FF0000",
+    "color_text": "#000000",
+    "color_background": "#ffffff"
+  },
+  "accessibility": {
+    "color_contrast": "4.5:1",
+    "focus_outline": {
+      "color": "#FFBF00",
+      "width": "2px",
+      "style": "solid"
+    },
+    "aria_labels": {
+      "username_input": "ユーザー名入力欄",
+      "password_input": "パスワード入力欄",
+      "submit_button": "ログインボタン",
+      "forgot_password_link": "パスワードを忘れた場合リンク"
+    },
+    "keyboard_navigation": {
+      "tab_order": [
+        "username",
+        "password",
+        "submit_button",
+        "forgot_password_link"
+      ]
+    },
+    "screen_reader": {
+      "role": "form",
+      "validation_message": "エラーメッセージは画面読み上げに含める"
+    }
+  }
+}

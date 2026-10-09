@@ -1,0 +1,4068 @@
+===== design revision 2026-10-09 15:43:30 by James Martin =====
+note: ユニットテスト対象として"ログインAPIの入力バリデーション・認証ロジック・トークン返却"を明確化。テストケースは"正常系（有効ユーザー・無効パスワード）・異常系（空入力・無効ユーザー・レートリミット超過）"をカバーする設計に進めます。
+--- previous design.txt ---
+(empty)
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "正常系_有効ユーザー",
+          "description": "正しいユーザー名とパスワードでログイン",
+          "input": {
+            "username": "test_user",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 200,
+            "response": {
+              "access_token": "valid_jwt_token",
+              "refresh_token": "valid_refresh_token",
+              "expires_in": 3600
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "異常系_無効パスワード",
+          "description": "正しいユーザー名で無効パスワードを入力",
+          "input": {
+            "username": "test_user",
+            "password": "WrongPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 401,
+            "response": {
+              "error": "Invalid credentials"
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "空入力_ユーザー名",
+          "description": "ユーザー名を空に入力",
+          "input": {
+            "username": "",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 400,
+            "response": {
+              "error": "Username must be 4-20 characters long"
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "レートリミット超過",
+          "description": "1分間に最大10回ログインリクエストを送信",
+          "input": {
+            "username": "test_user",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 429,
+            "response": {
+              "error": "リクエスト数上限を超過しました"
+            }
+          },
+          "test_method": "POST /api/auth/login (10回繰り返し)"
+        }
+      ],
+      "test_environment": {
+        "mock_data": {
+          "valid_users": [
+            "test_user",
+            "admin_user"
+          ],
+          "mock_response": {
+            "access_token": "{{random_jwt_token}}",
+            "refresh_token": "{{random_refresh_token}}",
+            "expires_in": 3600
+          }
+        },
+        "test_framework": [
+          "pytest",
+          "unittest"
+        ],
+        "test_files": [
+          "test_login_unit.py",
+          "test_validation_unit.py"
+        ]
+      },
+      "test_coverage": {
+        "validation_rules": [
+          "username_length",
+          "password_strength",
+          "rate_limit"
+        ],
+        "auth_logic": [
+          "password_hashing",
+          "token_generation"
+        ],
+        "error_handling": [
+          "400/401/429 responses"
+        ]
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:43:38 by Jennifer Lopez =====
+note: 統合テストを設計。APIとUIの連携を確認し、以下のテストケースを追加: 1) 正常系: 有効ユーザーがログイン後、トークンが正しく返却されるか確認。2) 異常系: 非同期API失敗時のエラー処理（例: トークン生成エラー）。3) UI連携: ログイン成功時の画面遷移（例: トークンが返却されたらメッセージ表示→トップページ遷移）。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "正常系_有効ユーザー",
+          "description": "正しいユーザー名とパスワードでログイン",
+          "input": {
+            "username": "test_user",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 200,
+            "response": {
+              "access_token": "valid_jwt_token",
+              "refresh_token": "valid_refresh_token",
+              "expires_in": 3600
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "異常系_無効パスワード",
+          "description": "正しいユーザー名で無効パスワードを入力",
+          "input": {
+            "username": "test_user",
+            "password": "WrongPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 401,
+            "response": {
+              "error": "Invalid credentials"
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "空入力_ユーザー名",
+          "description": "ユーザー名を空に入力",
+          "input": {
+            "username": "",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 400,
+            "response": {
+              "error": "Username must be 4-20 characters long"
+            }
+          },
+          "test_method": "POST /api/auth/login"
+        },
+        {
+          "name": "レートリミット超過",
+          "description": "1分間に最大10回ログインリクエストを送信",
+          "input": {
+            "username": "test_user",
+            "password": "ValidPass123!"
+          },
+          "expected_behavior": {
+            "status_code": 429,
+            "response": {
+              "error": "リクエスト数上限を超過しました"
+            }
+          },
+          "test_method": "POST /api/auth/login (10回繰り返し)"
+        }
+      ],
+      "test_environment": {
+        "mock_data": {
+          "valid_users": [
+            "test_user",
+            "admin_user"
+          ],
+          "mock_response": {
+            "access_token": "{{random_jwt_token}}",
+            "refresh_token": "{{random_refresh_token}}",
+            "expires_in": 3600
+          }
+        },
+        "test_framework": [
+          "pytest",
+          "unittest"
+        ],
+        "test_files": [
+          "test_login_unit.py",
+          "test_validation_unit.py"
+        ]
+      },
+      "test_coverage": {
+        "validation_rules": [
+          "username_length",
+          "password_strength",
+          "rate_limit"
+        ],
+        "auth_logic": [
+          "password_hashing",
+          "token_generation"
+        ],
+        "error_handling": [
+          "400/401/429 responses"
+        ]
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "integration_test_spec": {
+    "login_flow": {
+      "test_cases": [
+        {
+          "name": "正常系_ログイン成功トークン返却",
+          "description": "有効ユーザーがログイン後、APIから返却されるトークンが正しくUIに反映されるか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面に「test_user」と「ValidPass123!」を入力",
+              "expected": "APIが200返却し、トークンが「access_token」と「refresh_token」としてUIのstateに格納される"
+            },
+            {
+              "step": "2. UIがトークンを取得後、トップページへ遷移し、トークンがヘッダーにセットされる",
+              "expected": "ヘッダーに「Bearer <valid_jwt_token>」が設定され、ページがロードされる"
+            }
+          ],
+          "test_method": "POST /api/auth/login → UI state check (React Context/Redux) + API response check"
+        },
+        {
+          "name": "非同期エラー_トークン生成失敗",
+          "description": "API側でトークン生成に失敗した場合、UIが適切なエラーメッセージを表示するか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面に「test_user」と「InvalidPass123!」を入力",
+              "expected": "APIが401返却し、UIが「Invalid credentials」を表示する"
+            },
+            {
+              "step": "2. UIがエラー状態を保持し、ログインボタンが無効化される",
+              "expected": "ボタン背景色が灰色化（#ccc） + 入力フィールドが焦点を保持"
+            }
+          ],
+          "test_method": "POST /api/auth/login (失敗用パスワード) → UI error display check"
+        },
+        {
+          "name": "ログイン成功_トップページ遷移",
+          "description": "ログイン成功後、UIがトップページへ自動遷移するか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面で「test_user」と「ValidPass123!」を入力し、ログインボタンを押下",
+              "expected": "トップページへの遷移が完了し、トークンが「localStorage」に保存される"
+            },
+            {
+              "step": "2. トップページで「ログアウト」ボタンをクリックし、ログアウト処理が完了",
+              "expected": "トップページからログイン画面へ遷移し、トークンが削除される"
+            }
+          ],
+          "test_method": "POST /api/auth/login → UI route change + localStorage check"
+        }
+      ],
+      "test_environment": {
+        "mock_data": {
+          "valid_users": [
+            {
+              "id": "uuid123",
+              "username": "test_user",
+              "hashed_password": "hashed_valid_pass"
+            }
+          ],
+          "error_response": {
+            "status_code": 401,
+            "error_message": "Invalid credentials",
+            "ui_display": "「ログインに失敗しました」のアラート表示"
+          }
+        },
+        "test_framework": [
+          "cypress",
+          "pytest"
+        ],
+        "test_files": [
+          "test_integration_login_flow.cy.js",
+          "test_api_token_generation_failure.py"
+        ]
+      },
+      "test_coverage": {
+        "api_integration": [
+          "トークン返却ロジック",
+          "非同期エラー処理",
+          "ログアウトAPI連携"
+        ],
+        "ui_behavior": [
+          "トークンUI表示",
+          "エラーメッセージ表示",
+          "画面遷移",
+          "入力フィールド焦点保持"
+        ],
+        "state_management": [
+          "localStorage/React Contextでのトークン保持",
+          "ログイン状態フラグ"
+        ]
+      }
+    },
+    "state_management": {
+      "auth_state": {
+        "variables": [
+          {
+            "name": "isLoggedIn",
+            "type": "boolean",
+            "default": "false",
+            "update_condition": "POST /api/auth/login (status_code 200) → true",
+            "reset_condition": "POST /api/auth/logout → false"
+          },
+          {
+            "name": "accessToken",
+            "type": "string",
+            "default": "",
+            "update_condition": "POST /api/auth/login (status_code 200) → response.access_token",
+            "reset_condition": "POST /api/auth/logout → \"\""
+          },
+          {
+            "name": "errorMessage",
+            "type": "string",
+            "default": "",
+            "update_condition": "POST /api/auth/login (status_code 401/429) → error_message",
+            "reset_condition": "isLoggedIn → false"
+          }
+        ]
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:43:47 by James Martin =====
+note: ユニットテスト対象として"ログインAPIの入力バリデーション・認証ロジック・トークン返却"を具体化。テストケースを以下に追加してテストコードの実装を支援します。
+--- previous design.txt ---
+{
+  "integration_test_spec": {
+    "login_flow": {
+      "test_cases": [
+        {
+          "name": "正常系_ログイン成功トークン返却",
+          "description": "有効ユーザーがログイン後、APIから返却されるトークンが正しくUIに反映されるか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面に「test_user」と「ValidPass123!」を入力",
+              "expected": "APIが200返却し、トークンが「access_token」と「refresh_token」としてUIのstateに格納される"
+            },
+            {
+              "step": "2. UIがトークンを取得後、トップページへ遷移し、トークンがヘッダーにセットされる",
+              "expected": "ヘッダーに「Bearer <valid_jwt_token>」が設定され、ページがロードされる"
+            }
+          ],
+          "test_method": "POST /api/auth/login → UI state check (React Context/Redux) + API response check"
+        },
+        {
+          "name": "非同期エラー_トークン生成失敗",
+          "description": "API側でトークン生成に失敗した場合、UIが適切なエラーメッセージを表示するか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面に「test_user」と「InvalidPass123!」を入力",
+              "expected": "APIが401返却し、UIが「Invalid credentials」を表示する"
+            },
+            {
+              "step": "2. UIがエラー状態を保持し、ログインボタンが無効化される",
+              "expected": "ボタン背景色が灰色化（#ccc） + 入力フィールドが焦点を保持"
+            }
+          ],
+          "test_method": "POST /api/auth/login (失敗用パスワード) → UI error display check"
+        },
+        {
+          "name": "ログイン成功_トップページ遷移",
+          "description": "ログイン成功後、UIがトップページへ自動遷移するか確認。",
+          "steps": [
+            {
+              "step": "1. ログイン画面で「test_user」と「ValidPass123!」を入力し、ログインボタンを押下",
+              "expected": "トップページへの遷移が完了し、トークンが「localStorage」に保存される"
+            },
+            {
+              "step": "2. トップページで「ログアウト」ボタンをクリックし、ログアウト処理が完了",
+              "expected": "トップページからログイン画面へ遷移し、トークンが削除される"
+            }
+          ],
+          "test_method": "POST /api/auth/login → UI route change + localStorage check"
+        }
+      ],
+      "test_environment": {
+        "mock_data": {
+          "valid_users": [
+            {
+              "id": "uuid123",
+              "username": "test_user",
+              "hashed_password": "hashed_valid_pass"
+            }
+          ],
+          "error_response": {
+            "status_code": 401,
+            "error_message": "Invalid credentials",
+            "ui_display": "「ログインに失敗しました」のアラート表示"
+          }
+        },
+        "test_framework": [
+          "cypress",
+          "pytest"
+        ],
+        "test_files": [
+          "test_integration_login_flow.cy.js",
+          "test_api_token_generation_failure.py"
+        ]
+      },
+      "test_coverage": {
+        "api_integration": [
+          "トークン返却ロジック",
+          "非同期エラー処理",
+          "ログアウトAPI連携"
+        ],
+        "ui_behavior": [
+          "トークンUI表示",
+          "エラーメッセージ表示",
+          "画面遷移",
+          "入力フィールド焦点保持"
+        ],
+        "state_management": [
+          "localStorage/React Contextでのトークン保持",
+          "ログイン状態フラグ"
+        ]
+      }
+    },
+    "state_management": {
+      "auth_state": {
+        "variables": [
+          {
+            "name": "isLoggedIn",
+            "type": "boolean",
+            "default": "false",
+            "update_condition": "POST /api/auth/login (status_code 200) → true",
+            "reset_condition": "POST /api/auth/logout → false"
+          },
+          {
+            "name": "accessToken",
+            "type": "string",
+            "default": "",
+            "update_condition": "POST /api/auth/login (status_code 200) → response.access_token",
+            "reset_condition": "POST /api/auth/logout → \"\""
+          },
+          {
+            "name": "errorMessage",
+            "type": "string",
+            "default": "",
+            "update_condition": "POST /api/auth/login (status_code 401/429) → error_message",
+            "reset_condition": "isLoggedIn → false"
+          }
+        ]
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "バリデーション_空入力時のエラー処理",
+          "description": "username/passwordが空欄の場合、APIが400返却し、バリデーションエラーを返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Validation failed",
+                  "details": [
+                    {
+                      "field": "username",
+                      "message": "This field is required"
+                    },
+                    {
+                      "field": "password",
+                      "message": "This field is required"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (Flask APIテスト用)"
+        },
+        {
+          "name": "認証ロジック_無効ユーザー時の401返却",
+          "description": "非登録ユーザーがログインしようとした場合、APIが401返却し、認証失敗を返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"nonexistent_user\", \"password\": \"test123\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Authentication failed",
+                  "message": "Invalid credentials"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_user_dbテスト用)"
+        },
+        {
+          "name": "トークン返却_正常系",
+          "description": "有効ユーザーがログインした場合、APIが200返却し、JWTトークンを正しく返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "expires_in": 3600
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_jwtテスト用)"
+        },
+        {
+          "name": "トークン返却_パスワードハッシュ失敗時",
+          "description": "パスワードハッシュが正しくない場合、APIが500返却し、内部エラーを返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal server error",
+                  "message": "Authentication failed: Invalid password hash"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_db_errorテスト用)"
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt"
+      ],
+      "test_files": [
+        "test_login_validation.py",
+        "test_login_authentication.py",
+        "test_token_generation.py",
+        "test_error_handling.py"
+      ],
+      "test_coverage": [
+        "バリデーションロジック",
+        "認証ロジック",
+        "トークン生成ロジック",
+        "エラー処理",
+        "JWT検証",
+        "DB接続エラー処理"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:43:56 by Jennifer Lopez =====
+note: 統合テストを追加: 1) APIとUIの連携確認（トークン返却→画面遷移）、2) 非同期エラー時のUI反映（例: トークン生成失敗→エラーメッセージ表示）、3) レートリミット超過時のUI通知（例: 429エラー→「リクエスト数上限」表示）。API仕様とUIのバリエーションを統合テストで網羅。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "バリデーション_空入力時のエラー処理",
+          "description": "username/passwordが空欄の場合、APIが400返却し、バリデーションエラーを返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Validation failed",
+                  "details": [
+                    {
+                      "field": "username",
+                      "message": "This field is required"
+                    },
+                    {
+                      "field": "password",
+                      "message": "This field is required"
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (Flask APIテスト用)"
+        },
+        {
+          "name": "認証ロジック_無効ユーザー時の401返却",
+          "description": "非登録ユーザーがログインしようとした場合、APIが401返却し、認証失敗を返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"nonexistent_user\", \"password\": \"test123\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Authentication failed",
+                  "message": "Invalid credentials"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_user_dbテスト用)"
+        },
+        {
+          "name": "トークン返却_正常系",
+          "description": "有効ユーザーがログインした場合、APIが200返却し、JWTトークンを正しく返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "expires_in": 3600
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_jwtテスト用)"
+        },
+        {
+          "name": "トークン返却_パスワードハッシュ失敗時",
+          "description": "パスワードハッシュが正しくない場合、APIが500返却し、内部エラーを返すか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal server error",
+                  "message": "Authentication failed: Invalid password hash"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest (mock_db_errorテスト用)"
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt"
+      ],
+      "test_files": [
+        "test_login_validation.py",
+        "test_login_authentication.py",
+        "test_token_generation.py",
+        "test_error_handling.py"
+      ],
+      "test_coverage": [
+        "バリデーションロジック",
+        "認証ロジック",
+        "トークン生成ロジック",
+        "エラー処理",
+        "JWT検証",
+        "DB接続エラー処理"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "トークン返却→UI遷移確認",
+          "description": "有効ユーザーがログイン後、トークンが返却されたらUIがトップページへ遷移し、メッセージ「ログイン成功」が表示されるか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "string",
+                  "refresh_token": "string",
+                  "expires_in": "integer"
+                },
+                "ui_behavior": {
+                  "success_message": "ログイン成功",
+                  "next_page": "/dashboard",
+                  "timeout": "3秒以内に遷移確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Selenium (UI自動化テスト用)",
+          "setup": {
+            "mock_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...",
+              "email_verified": true
+            }
+          }
+        },
+        {
+          "name": "トークン生成失敗→UIエラーメッセージ表示",
+          "description": "トークン生成エラー（例: JWTエラー）が発生した場合、UIが「ログインに失敗しました」と表示し、再試行ボタンを表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal server error",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "ログインに失敗しました",
+                  "error_icon": "⚠️",
+                  "retry_button": {
+                    "text": "再試行",
+                    "action": "click",
+                    "timeout": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Cypress (UIエラー確認用)",
+          "setup": {
+            "mock_jwt_error": {
+              "error": "JWT validation failed"
+            }
+          }
+        },
+        {
+          "name": "レートリミット超過→UI通知",
+          "description": "レートリミット超過（429）が発生した場合、UIが「1分以内に再試行」と表示し、エラーメッセージを表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (10回連続)",
+              "expected": {
+                "status_code": "429",
+                "response_body": {
+                  "error": "Too many requests",
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                "ui_behavior": {
+                  "error_message": "リクエスト数上限を超過しました",
+                  "retry_hint": "1分以内に再試行",
+                  "timeout": "1秒以内に表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Selenium (レートリミットテスト用)",
+          "setup": {
+            "rate_limit_config": {
+              "window_seconds": 60,
+              "max_requests": 10
+            }
+          }
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt",
+        "pytest-selenium",
+        "cypress"
+      ],
+      "test_files": [
+        "test_login_ui_flow.py",
+        "test_login_error_display.py",
+        "test_rate_limit_ui_notification.py"
+      ],
+      "test_coverage": [
+        "API→UI連携（トップページ遷移）",
+        "非同期エラー時のUI反映（エラーメッセージ表示）",
+        "レートリミット超過時のUI通知",
+        "UIの再試行ボタン機能",
+        "アクセシビリティ（スクリーンリーダー対応）"
+      ],
+      "ui_components": {
+        "success_message": {
+          "type": "alert",
+          "position": "center",
+          "duration": "3秒",
+          "text": "ログイン成功",
+          "style": {
+            "background_color": "#4CAF50",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        },
+        "error_message": {
+          "type": "alert",
+          "position": "center",
+          "duration": "auto",
+          "text": "ログインに失敗しました",
+          "icon": "⚠️",
+          "style": {
+            "background_color": "#FF9800",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        },
+        "retry_button": {
+          "text": "再試行",
+          "action": "click",
+          "disabled_state": {
+            "text": "再試行中...",
+            "color": "#9E9E9E"
+          }
+        },
+        "rate_limit_message": {
+          "type": "alert",
+          "position": "center",
+          "text": "リクエスト数上限を超過しました",
+          "retry_hint": "1分以内に再試行してください",
+          "style": {
+            "background_color": "#FF5722",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:44:09 by James Martin =====
+note: ユニットテスト対象を「ログインAPIの入力バリデーション・認証ロジック・トークン返却」に絞り、以下のテストケースを追加実装支援に向けた具体化を行いました。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "トークン返却→UI遷移確認",
+          "description": "有効ユーザーがログイン後、トークンが返却されたらUIがトップページへ遷移し、メッセージ「ログイン成功」が表示されるか確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "string",
+                  "refresh_token": "string",
+                  "expires_in": "integer"
+                },
+                "ui_behavior": {
+                  "success_message": "ログイン成功",
+                  "next_page": "/dashboard",
+                  "timeout": "3秒以内に遷移確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Selenium (UI自動化テスト用)",
+          "setup": {
+            "mock_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...",
+              "email_verified": true
+            }
+          }
+        },
+        {
+          "name": "トークン生成失敗→UIエラーメッセージ表示",
+          "description": "トークン生成エラー（例: JWTエラー）が発生した場合、UIが「ログインに失敗しました」と表示し、再試行ボタンを表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal server error",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "ログインに失敗しました",
+                  "error_icon": "⚠️",
+                  "retry_button": {
+                    "text": "再試行",
+                    "action": "click",
+                    "timeout": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Cypress (UIエラー確認用)",
+          "setup": {
+            "mock_jwt_error": {
+              "error": "JWT validation failed"
+            }
+          }
+        },
+        {
+          "name": "レートリミット超過→UI通知",
+          "description": "レートリミット超過（429）が発生した場合、UIが「1分以内に再試行」と表示し、エラーメッセージを表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (10回連続)",
+              "expected": {
+                "status_code": "429",
+                "response_body": {
+                  "error": "Too many requests",
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                "ui_behavior": {
+                  "error_message": "リクエスト数上限を超過しました",
+                  "retry_hint": "1分以内に再試行",
+                  "timeout": "1秒以内に表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + Selenium (レートリミットテスト用)",
+          "setup": {
+            "rate_limit_config": {
+              "window_seconds": 60,
+              "max_requests": 10
+            }
+          }
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt",
+        "pytest-selenium",
+        "cypress"
+      ],
+      "test_files": [
+        "test_login_ui_flow.py",
+        "test_login_error_display.py",
+        "test_rate_limit_ui_notification.py"
+      ],
+      "test_coverage": [
+        "API→UI連携（トップページ遷移）",
+        "非同期エラー時のUI反映（エラーメッセージ表示）",
+        "レートリミット超過時のUI通知",
+        "UIの再試行ボタン機能",
+        "アクセシビリティ（スクリーンリーダー対応）"
+      ],
+      "ui_components": {
+        "success_message": {
+          "type": "alert",
+          "position": "center",
+          "duration": "3秒",
+          "text": "ログイン成功",
+          "style": {
+            "background_color": "#4CAF50",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        },
+        "error_message": {
+          "type": "alert",
+          "position": "center",
+          "duration": "auto",
+          "text": "ログインに失敗しました",
+          "icon": "⚠️",
+          "style": {
+            "background_color": "#FF9800",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        },
+        "retry_button": {
+          "text": "再試行",
+          "action": "click",
+          "disabled_state": {
+            "text": "再試行中...",
+            "color": "#9E9E9E"
+          }
+        },
+        "rate_limit_message": {
+          "type": "alert",
+          "position": "center",
+          "text": "リクエスト数上限を超過しました",
+          "retry_hint": "1分以内に再試行してください",
+          "style": {
+            "background_color": "#FF5722",
+            "color": "#ffffff",
+            "border_radius": "4px"
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "空入力時のバリデーション失敗",
+          "description": "ユーザー名・パスワード両方が空欄の場合、API側でバリデーションエラー（400）を返し、UI側で「ユーザー名/パスワードを入力してください」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Bad Request",
+                  "message": "username: 入力が必要です, password: 入力が必要です"
+                },
+                "ui_behavior": {
+                  "error_message": [
+                    "ユーザー名を入力してください",
+                    "パスワードを入力してください"
+                  ],
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_validation_error": {
+              "username": "string",
+              "password": "string",
+              "required": true,
+              "min_length": 4,
+              "max_length": 20
+            }
+          }
+        },
+        {
+          "name": "無効ユーザー名の認証ロジック失敗",
+          "description": "存在しないユーザー名を入力した場合、認証ロジックで「ユーザー名が存在しません」を返し、UI側で「ユーザー名が存在しません」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"nonexistent_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User not found"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザー名が存在しません",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_nonexistent_user": {
+              "username": "nonexistent_user",
+              "hashed_password": "$2b$12$...",
+              "exists": false
+            }
+          }
+        },
+        {
+          "name": "パスワードハッシュ不一致による認証失敗",
+          "description": "正しいユーザー名と不正なパスワードハッシュを入力した場合、認証ロジックで「パスワードが正しくありません」を返し、UI側で「パスワードが正しくありません」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "パスワードが正しくありません",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_wrong_password": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...",
+              "correct_hash": "$2b$12$...different_hash..."
+            }
+          }
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt",
+        "pytest-selenium",
+        "cypress"
+      ],
+      "test_files": [
+        "test_login_validation.py",
+        "test_login_auth_logic.py",
+        "test_token_response.py"
+      ],
+      "test_coverage": [
+        "空入力時のバリデーション確認",
+        "無効ユーザー名時の認証ロジック確認",
+        "パスワードハッシュ不一致時のエラー処理",
+        "トークン返却時のAPIレスポンス構造確認",
+        "非同期エラー時のUI反映（エラー文言統合）"
+      ],
+      "api_validation_rules": {
+        "LoginRequest": {
+          "username": {
+            "type": "string",
+            "required": true,
+            "min_length": 4,
+            "max_length": 20,
+            "regex": "^[a-zA-Z0-9_]+$",
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          "password": {
+            "type": "string",
+            "required": true,
+            "min_length": 8,
+            "regex": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+]).+$",
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        }
+      }
+    }
+  }
+}
+===== design revision 2026-10-09 15:44:17 by Jennifer Lopez =====
+note: 統合テストを追加: 1) トークン返却後のUI遷移確認（トップページへのリダイレクト + メッセージ表示）、2) レートリミット超過時のUI通知（429エラー→「リクエスト数上限」表示）、3) 非同期エラー時のUIエラー文言統合（例: トークン生成失敗→「認証に失敗しました」）。API仕様とUIの連携をテストフローに組み込み、品質保証を強化
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "空入力時のバリデーション失敗",
+          "description": "ユーザー名・パスワード両方が空欄の場合、API側でバリデーションエラー（400）を返し、UI側で「ユーザー名/パスワードを入力してください」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Bad Request",
+                  "message": "username: 入力が必要です, password: 入力が必要です"
+                },
+                "ui_behavior": {
+                  "error_message": [
+                    "ユーザー名を入力してください",
+                    "パスワードを入力してください"
+                  ],
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_validation_error": {
+              "username": "string",
+              "password": "string",
+              "required": true,
+              "min_length": 4,
+              "max_length": 20
+            }
+          }
+        },
+        {
+          "name": "無効ユーザー名の認証ロジック失敗",
+          "description": "存在しないユーザー名を入力した場合、認証ロジックで「ユーザー名が存在しません」を返し、UI側で「ユーザー名が存在しません」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"nonexistent_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User not found"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザー名が存在しません",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_nonexistent_user": {
+              "username": "nonexistent_user",
+              "hashed_password": "$2b$12$...",
+              "exists": false
+            }
+          }
+        },
+        {
+          "name": "パスワードハッシュ不一致による認証失敗",
+          "description": "正しいユーザー名と不正なパスワードハッシュを入力した場合、認証ロジックで「パスワードが正しくありません」を返し、UI側で「パスワードが正しくありません」とエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "パスワードが正しくありません",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_wrong_password": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...",
+              "correct_hash": "$2b$12$...different_hash..."
+            }
+          }
+        }
+      ],
+      "test_framework": [
+        "pytest",
+        "pytest-mock",
+        "pytest-jwt",
+        "pytest-selenium",
+        "cypress"
+      ],
+      "test_files": [
+        "test_login_validation.py",
+        "test_login_auth_logic.py",
+        "test_token_response.py"
+      ],
+      "test_coverage": [
+        "空入力時のバリデーション確認",
+        "無効ユーザー名時の認証ロジック確認",
+        "パスワードハッシュ不一致時のエラー処理",
+        "トークン返却時のAPIレスポンス構造確認",
+        "非同期エラー時のUI反映（エラー文言統合）"
+      ],
+      "api_validation_rules": {
+        "LoginRequest": {
+          "username": {
+            "type": "string",
+            "required": true,
+            "min_length": 4,
+            "max_length": 20,
+            "regex": "^[a-zA-Z0-9_]+$",
+            "error_message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+          },
+          "password": {
+            "type": "string",
+            "required": true,
+            "min_length": 8,
+            "regex": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+]).+$",
+            "error_message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+          }
+        }
+      }
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "ログイン成功時のUI遷移確認",
+          "description": "有効ユーザーがログイン成功した場合、トークンが正しく返却され、UI側でトップページへリダイレクト + 「ログイン成功」メッセージが表示されることを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "valid_jwt_token",
+                  "refresh_token": "valid_refresh_token",
+                  "expires_in": 3600
+                },
+                "ui_behavior": {
+                  "redirect_url": "/dashboard",
+                  "success_message": "ログイン成功",
+                  "timeout": "2秒以内にリダイレクト + メッセージ確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_successful_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true
+            }
+          }
+        },
+        {
+          "name": "レートリミット超過時のUI通知",
+          "description": "1分間10回のリクエストを超えた場合、UI側で「リクエスト数上限を超過しました」とエラー表示 + 429レスポンスを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (10回連続)",
+              "expected": {
+                "status_code": "429",
+                "response_body": {
+                  "error": "Too Many Requests",
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                "ui_behavior": {
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "rate_limit_mock": {
+              "flask_limiter": {
+                "max": 10,
+                "window": 60,
+                "error_status": 429
+              }
+            }
+          }
+        },
+        {
+          "name": "非同期API失敗時のUIエラー文言統合",
+          "description": "トークン生成に失敗した場合、UI側で「認証に失敗しました」と統一したエラー文言を表示し、401レスポンスを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_token_generation_error": {
+              "error": "JWT generation failed"
+            }
+          }
+        }
+      ],
+      "test_files": [
+        "test_login_success_flow.py",
+        "test_rate_limit_ui_notification.py",
+        "test_async_error_ui_message.py"
+      ],
+      "test_coverage": [
+        "ログイン成功時のUI遷移確認",
+        "レートリミット超過時のUI通知",
+        "非同期エラー時のUIエラー文言統合",
+        "トップページ遷移 + メッセージ表示",
+        "エラーメッセージの統一性確認"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:44:56 by James Martin =====
+note: ユニットテスト対象を「ログインAPIの入力バリデーション・認証ロジック・トークン返却」に追加。無効ユーザー・空入力のテストケースを設計し、APIバリデーションと認証ロジックのテストを具体化。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "ログイン成功時のUI遷移確認",
+          "description": "有効ユーザーがログイン成功した場合、トークンが正しく返却され、UI側でトップページへリダイレクト + 「ログイン成功」メッセージが表示されることを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "valid_jwt_token",
+                  "refresh_token": "valid_refresh_token",
+                  "expires_in": 3600
+                },
+                "ui_behavior": {
+                  "redirect_url": "/dashboard",
+                  "success_message": "ログイン成功",
+                  "timeout": "2秒以内にリダイレクト + メッセージ確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_successful_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true
+            }
+          }
+        },
+        {
+          "name": "レートリミット超過時のUI通知",
+          "description": "1分間10回のリクエストを超えた場合、UI側で「リクエスト数上限を超過しました」とエラー表示 + 429レスポンスを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (10回連続)",
+              "expected": {
+                "status_code": "429",
+                "response_body": {
+                  "error": "Too Many Requests",
+                  "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                },
+                "ui_behavior": {
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "rate_limit_mock": {
+              "flask_limiter": {
+                "max": 10,
+                "window": 60,
+                "error_status": 429
+              }
+            }
+          }
+        },
+        {
+          "name": "非同期API失敗時のUIエラー文言統合",
+          "description": "トークン生成に失敗した場合、UI側で「認証に失敗しました」と統一したエラー文言を表示し、401レスポンスを確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"wrong_hash_value\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Invalid password hash"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "1秒以内にエラー表示確認"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_token_generation_error": {
+              "error": "JWT generation failed"
+            }
+          }
+        }
+      ],
+      "test_files": [
+        "test_login_success_flow.py",
+        "test_rate_limit_ui_notification.py",
+        "test_async_error_ui_message.py"
+      ],
+      "test_coverage": [
+        "ログイン成功時のUI遷移確認",
+        "レートリミット超過時のUI通知",
+        "非同期エラー時のUIエラー文言統合",
+        "トップページ遷移 + メッセージ表示",
+        "エラーメッセージの統一性確認"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザーのログイン失敗",
+          "description": "非活性ユーザー（is_active: false）がログインを試行した場合、401 Unauthorizedを返却し、UI側で「認証に失敗しました」を表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF4444",
+                    "background_color": "#fff8f8"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "空入力時のバリデーション失敗",
+          "description": "ユーザー名・パスワードが空欄の場合、400 Bad Requestを返却し、UI側で「ユーザー名/パスワードを入力してください」を表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Bad Request",
+                  "message": "Validation failed: username and password are required"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザー名/パスワードを入力してください",
+                  "timeout": "1秒以内",
+                  "error_display": {
+                    "field_highlight": [
+                      "username_input",
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "underline_color": "#FF4444"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "empty_input_validation": {
+              "validation_rules": {
+                "username": [
+                  "required",
+                  "min_length:4"
+                ],
+                "password": [
+                  "required",
+                  "min_length:8"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "入力バリデーション成功時のトークン返却",
+          "description": "正規入力（ユーザー名: test_user, パスワード: ValidPass123!）が成功した場合、JWTトークンを正しく返却し、UI側でトップページへ遷移",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "valid_jwt_token",
+                  "refresh_token": "valid_refresh_token",
+                  "expires_in": 3600
+                },
+                "ui_behavior": {
+                  "redirect_url": "/dashboard",
+                  "success_message": {
+                    "text": "ログイン成功",
+                    "position": "top-center",
+                    "font_size": "16px",
+                    "color": "#0066FF",
+                    "background_color": "#e6f7ff",
+                    "timeout": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "valid_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": true
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザーのログイン失敗",
+        "空入力時のバリデーション失敗",
+        "入力バリデーション成功時のトークン返却",
+        "ユーザー名/パスワードのバリデーション",
+        "認証ロジックの正確性",
+        "トークン返却の正確性"
+      ],
+      "test_files": [
+        "test_invalid_user_login.py",
+        "test_empty_input_validation.py",
+        "test_valid_login_token.py"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:45:04 by Jennifer Lopez =====
+note: 統合テストを追加: 1) 無効ユーザーのログイン失敗時のUIエラー表示（401 + 確認メッセージ）、2) 非同期エラー時のUIタイムアウト設定（2秒以内）、3) レートリミット超過時のUI通知（エラーアイコン + 背景色変更）、4) トップページ遷移時のメッセージ位置・フォントサイズを明記。API仕様とUIの連携を具体化した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザーのログイン失敗",
+          "description": "非活性ユーザー（is_active: false）がログインを試行した場合、401 Unauthorizedを返却し、UI側で「認証に失敗しました」を表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF4444",
+                    "background_color": "#fff8f8"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "空入力時のバリデーション失敗",
+          "description": "ユーザー名・パスワードが空欄の場合、400 Bad Requestを返却し、UI側で「ユーザー名/パスワードを入力してください」を表示",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "Bad Request",
+                  "message": "Validation failed: username and password are required"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザー名/パスワードを入力してください",
+                  "timeout": "1秒以内",
+                  "error_display": {
+                    "field_highlight": [
+                      "username_input",
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "underline_color": "#FF4444"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "empty_input_validation": {
+              "validation_rules": {
+                "username": [
+                  "required",
+                  "min_length:4"
+                ],
+                "password": [
+                  "required",
+                  "min_length:8"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "name": "入力バリデーション成功時のトークン返却",
+          "description": "正規入力（ユーザー名: test_user, パスワード: ValidPass123!）が成功した場合、JWTトークンを正しく返却し、UI側でトップページへ遷移",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "valid_jwt_token",
+                  "refresh_token": "valid_refresh_token",
+                  "expires_in": 3600
+                },
+                "ui_behavior": {
+                  "redirect_url": "/dashboard",
+                  "success_message": {
+                    "text": "ログイン成功",
+                    "position": "top-center",
+                    "font_size": "16px",
+                    "color": "#0066FF",
+                    "background_color": "#e6f7ff",
+                    "timeout": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "valid_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": true
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザーのログイン失敗",
+        "空入力時のバリデーション失敗",
+        "入力バリデーション成功時のトークン返却",
+        "ユーザー名/パスワードのバリデーション",
+        "認証ロジックの正確性",
+        "トークン返却の正確性"
+      ],
+      "test_files": [
+        "test_invalid_user_login.py",
+        "test_empty_input_validation.py",
+        "test_valid_login_token.py"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザーのログイン失敗（統合テスト）",
+          "description": "非活性ユーザーがログインを試行し、UI側で「認証に失敗しました」を表示（401 + 確認メッセージ）",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF4444",
+                    "background_color": "#fff8f8",
+                    "error_icon": {
+                      "type": "warning",
+                      "size": "16px",
+                      "position": "top-left"
+                    }
+                  },
+                  "redirect_behavior": {
+                    "target": "/login?error=401",
+                    "timeout": "3秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "非同期エラー時のUI反映（統合テスト）",
+          "description": "JWTトークン生成失敗時、UI側で「認証に失敗しました」を表示（2秒以内タイムアウト）",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal Server Error",
+                  "message": "Failed to generate JWT token"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "underline_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center",
+                      "font_size": "12px",
+                      "color": "#666666"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_token_generation_error": {
+              "error_type": "jwt_error",
+              "expected_response": {
+                "access_token": null,
+                "refresh_token": null,
+                "expires_in": null
+              }
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザーのログイン失敗（UIエラー表示）",
+        "空入力時のバリデーション失敗（ユニットテスト追加）",
+        "入力バリデーション成功時のトークン返却",
+        "非同期エラー時のUIタイムアウト",
+        "レートリミット超過時のUI通知",
+        "トップページ遷移時のメッセージ表示"
+      ],
+      "test_files": [
+        "test_invalid_user_login_integration.py",
+        "test_async_error_ui_response.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:45:11 by James Martin =====
+note: ユニットテスト対象を"無効ユーザー認証ロジック"と"空入力バリデーション"に追加。API返却体構造とUIエラー文言統合を明確化し、テストケースを具体化した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザーのログイン失敗（統合テスト）",
+          "description": "非活性ユーザーがログインを試行し、UI側で「認証に失敗しました」を表示（401 + 確認メッセージ）",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF4444",
+                    "background_color": "#fff8f8",
+                    "error_icon": {
+                      "type": "warning",
+                      "size": "16px",
+                      "position": "top-left"
+                    }
+                  },
+                  "redirect_behavior": {
+                    "target": "/login?error=401",
+                    "timeout": "3秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "非同期エラー時のUI反映（統合テスト）",
+          "description": "JWTトークン生成失敗時、UI側で「認証に失敗しました」を表示（2秒以内タイムアウト）",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "500",
+                "response_body": {
+                  "error": "Internal Server Error",
+                  "message": "Failed to generate JWT token"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "timeout": "2秒以内",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "underline_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center",
+                      "font_size": "12px",
+                      "color": "#666666"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_token_generation_error": {
+              "error_type": "jwt_error",
+              "expected_response": {
+                "access_token": null,
+                "refresh_token": null,
+                "expires_in": null
+              }
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザーのログイン失敗（UIエラー表示）",
+        "空入力時のバリデーション失敗（ユニットテスト追加）",
+        "入力バリデーション成功時のトークン返却",
+        "非同期エラー時のUIタイムアウト",
+        "レートリミット超過時のUI通知",
+        "トップページ遷移時のメッセージ表示"
+      ],
+      "test_files": [
+        "test_invalid_user_login_integration.py",
+        "test_async_error_ui_response.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（ユニットテスト）",
+          "description": "非活性ユーザーの認証ロジックをテスト。API返却体構造（401 + 詳細エラー）とUIエラー文言統合を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（ユニットテスト）",
+          "description": "空入力時のAPIバリデーションとUIエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "422",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Validation failed",
+                  "details": {
+                    "username": "ユーザー名は4〜20文字、英数字と_のみ使用できます",
+                    "password": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+                  }
+                }
+              },
+              "ui_behavior": {
+                "error_message": "ユーザー名/パスワードが不適切です",
+                "error_display": {
+                  "field_highlight": [
+                    "username_input",
+                    "password_input"
+                  ],
+                  "border_color": "#FF4444"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_empty_input": {
+              "username": "",
+              "password": ""
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + UIエラー統合）",
+        "空入力バリデーション（APIバリデーション + UIエラー表示）",
+        "無効ユーザーのログイン失敗（統合テスト追加）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_logic_unit.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:45:19 by Jennifer Lopez =====
+note: 統合テストを追加: 1) 無効ユーザー認証時のUIエラー表示（401 + 詳細メッセージ統合）、2) 非同期エラー時のUIタイムアウト（2秒以内）、3) レートリミット超過時のUI通知（エラーアイコン + 背景色変更）、4) トップページ遷移時のメッセージ要素（位置・フォントサイズ・背景色）を明確化。API仕様とUIの連携を具体化した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（ユニットテスト）",
+          "description": "非活性ユーザーの認証ロジックをテスト。API返却体構造（401 + 詳細エラー）とUIエラー文言統合を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（ユニットテスト）",
+          "description": "空入力時のAPIバリデーションとUIエラー表示を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "422",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Validation failed",
+                  "details": {
+                    "username": "ユーザー名は4〜20文字、英数字と_のみ使用できます",
+                    "password": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+                  }
+                }
+              },
+              "ui_behavior": {
+                "error_message": "ユーザー名/パスワードが不適切です",
+                "error_display": {
+                  "field_highlight": [
+                    "username_input",
+                    "password_input"
+                  ],
+                  "border_color": "#FF4444"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_empty_input": {
+              "username": "",
+              "password": ""
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + UIエラー統合）",
+        "空入力バリデーション（APIバリデーション + UIエラー表示）",
+        "無効ユーザーのログイン失敗（統合テスト追加）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_logic_unit.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（統合テスト）",
+          "description": "非活性ユーザーのログイン失敗時のAPI返却体（401）とUIエラー文言統合を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザーが無効です",
+                  "error_display": {
+                    "field_highlight": [
+                      "username_input",
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center",
+                      "font_size": "12px",
+                      "color": "#666666"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "非同期API失敗時のUIエラー統合（2秒タイムアウト）",
+          "description": "JWT生成失敗時のUIエラー文言統合とタイムアウト確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (非同期失敗)",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Authentication failed: Token generation failed"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout": {
+                      "duration": "2000ms",
+                      "message": "認証処理中..."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium + pytest-asyncio",
+          "setup": {
+            "mock_token_generation_error": {
+              "error": "JWT generation failed: Invalid secret key",
+              "should_raise": true
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + UIエラー統合）",
+        "空入力バリデーション（APIバリデーション + UIエラー表示）",
+        "無効ユーザーのログイン失敗（統合テスト）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+        "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_integration.py",
+        "test_async_error_ui_message.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "無効ユーザー認証ロジック（統合テスト）",
+    "空入力バリデーション（ユニットテスト）",
+    "非同期API失敗時のUIエラー統合（2秒タイムアウト）",
+    "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+    "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+  ]
+}
+===== design revision 2026-10-09 15:45:30 by James Martin =====
+note: ユニットテスト対象を"無効ユーザー認証ロジック"と"空入力バリデーション"に追加。API返却体構造とUIエラー文言統合を具体化し、テストケースを設計した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（統合テスト）",
+          "description": "非活性ユーザーのログイン失敗時のAPI返却体（401）とUIエラー文言統合を確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"inactive_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": "ユーザーが無効です",
+                  "error_display": {
+                    "field_highlight": [
+                      "username_input",
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout_message": {
+                      "text": "操作が完了しました",
+                      "position": "bottom-center",
+                      "font_size": "12px",
+                      "color": "#666666"
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "inactive_user",
+              "hashed_password": "$2b$12$...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "非同期API失敗時のUIエラー統合（2秒タイムアウト）",
+          "description": "JWT生成失敗時のUIエラー文言統合とタイムアウト確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" } (非同期失敗)",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Authentication failed: Token generation failed"
+                },
+                "ui_behavior": {
+                  "error_message": "認証に失敗しました",
+                  "error_display": {
+                    "field_highlight": [
+                      "password_input"
+                    ],
+                    "border_color": "#FF4444",
+                    "timeout": {
+                      "duration": "2000ms",
+                      "message": "認証処理中..."
+                    }
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium + pytest-asyncio",
+          "setup": {
+            "mock_token_generation_error": {
+              "error": "JWT generation failed: Invalid secret key",
+              "should_raise": true
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + UIエラー統合）",
+        "空入力バリデーション（APIバリデーション + UIエラー表示）",
+        "無効ユーザーのログイン失敗（統合テスト）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+        "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_integration.py",
+        "test_async_error_ui_message.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "無効ユーザー認証ロジック（統合テスト）",
+    "空入力バリデーション（ユニットテスト）",
+    "非同期API失敗時のUIエラー統合（2秒タイムアウト）",
+    "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+    "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+  ]
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（ユニットテスト）",
+          "description": "ユーザーが無効（is_active: false）な場合のAPI返却体と認証ロジックの検証",
+          "steps": [
+            {
+              "step": "ユーザー登録済みデータを取得: mock_inactive_user = { 'username': 'test_inactive', 'hashed_password': '$2b$12$...correct_hash...', 'is_active': false }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                }
+              }
+            },
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_inactive\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "api_behavior": {
+                  "authentication_failure": true,
+                  "returned_error": "Unauthorized",
+                  "error_message": "User not active"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "test_inactive",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（ユニットテスト）",
+          "description": "空のユーザー名/パスワード入力時のAPIバリデーションとエラー返却体確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Username and password are required",
+                  "detail": {
+                    "username": "This field is required",
+                    "password": "This field is required"
+                  }
+                }
+              }
+            },
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Password is required",
+                  "detail": {
+                    "password": "This field is required"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pydantic_validator_mock",
+          "setup": {
+            "mock_empty_request": {
+              "username": "",
+              "password": ""
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + 詳細エラー確認）",
+        "空入力バリデーション（APIバリデーション + エラー返却体）",
+        "ユーザー名/パスワードの最小長度（4文字/8文字）確認",
+        "ユーザー名の英数字_のみ許可（正規表現）確認"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_unit.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+===== design revision 2026-10-09 15:45:37 by Jennifer Lopez =====
+note: 統合テストを追加: 1) 無効ユーザー認証時のUIエラー表示（401 + 詳細メッセージ統合）、2) 非同期エラー時のUIタイムアウト（2秒以内）、3) レートリミット超過時のUI通知（エラーアイコン + 背景色変更）、4) トップページ遷移時のメッセージ要素（位置・フォントサイズ・背景色）を明確化。API仕様とUIの連携を具体化した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（ユニットテスト）",
+          "description": "ユーザーが無効（is_active: false）な場合のAPI返却体と認証ロジックの検証",
+          "steps": [
+            {
+              "step": "ユーザー登録済みデータを取得: mock_inactive_user = { 'username': 'test_inactive', 'hashed_password': '$2b$12$...correct_hash...', 'is_active': false }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                }
+              }
+            },
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_inactive\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "api_behavior": {
+                  "authentication_failure": true,
+                  "returned_error": "Unauthorized",
+                  "error_message": "User not active"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "test_inactive",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true,
+              "is_active": false
+            },
+            "mock_auth_response": {
+              "access_token": null,
+              "refresh_token": null,
+              "expires_in": null,
+              "error": "Unauthorized"
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（ユニットテスト）",
+          "description": "空のユーザー名/パスワード入力時のAPIバリデーションとエラー返却体確認",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Username and password are required",
+                  "detail": {
+                    "username": "This field is required",
+                    "password": "This field is required"
+                  }
+                }
+              }
+            },
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "Password is required",
+                  "detail": {
+                    "password": "This field is required"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pydantic_validator_mock",
+          "setup": {
+            "mock_empty_request": {
+              "username": "",
+              "password": ""
+            }
+          }
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証ロジック（API返却体 + 詳細エラー確認）",
+        "空入力バリデーション（APIバリデーション + エラー返却体）",
+        "ユーザー名/パスワードの最小長度（4文字/8文字）確認",
+        "ユーザー名の英数字_のみ許可（正規表現）確認"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_unit.py",
+        "test_empty_input_validation_unit.py"
+      ]
+    }
+  }
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（統合テスト）",
+          "description": "ユーザーが無効（is_active: false）な場合のAPI返却体とUIエラー表示の統合テスト",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_inactive\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": {
+                    "text": "ユーザーが無効です。再度ログインしてください",
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF5252",
+                    "background_color": "#fffde7",
+                    "duration": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "test_inactive",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（統合テスト）",
+          "description": "空のユーザー名/パスワード入力時のAPIバリデーションとUIエラー表示の統合",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名とパスワードが入力されていません",
+                  "detail": {
+                    "username": "このフィールドは必須です",
+                    "password": "このフィールドは必須です"
+                  }
+                },
+                "ui_behavior": {
+                  "error_message": {
+                    "text": "ユーザー名とパスワードを入力してください",
+                    "position": "top",
+                    "font_size": "12px",
+                    "color": "#FF5252",
+                    "duration": "1秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium"
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証時のAPI返却体 + UIエラー表示（位置・フォントサイズ・色）",
+        "空入力バリデーション + UIエラー表示（詳細メッセージ統合）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+        "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_integration.py",
+        "test_empty_input_validation_integration.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "無効ユーザー認証ロジック（API返却体 + UIエラー表示）",
+    "空入力バリデーション（APIバリデーション + UIエラー表示）",
+    "非同期エラー時のUIタイムアウト（2秒以内）",
+    "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+    "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+  ]
+}
+===== design revision 2026-10-09 15:46:24 by James Martin =====
+note: ユニットテスト対象を"ユーザー名/パスワードのバリデーションロジック"と"認証成功時のトークン発行ロジック"に追加。API返却体の構造（access_token/refresh_token/expires_in）と、ハッシュ化・検証の実装条件を明確化した。
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "無効ユーザー認証ロジック（統合テスト）",
+          "description": "ユーザーが無効（is_active: false）な場合のAPI返却体とUIエラー表示の統合テスト",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"test_inactive\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: User is inactive",
+                  "detail": "User not active"
+                },
+                "ui_behavior": {
+                  "error_message": {
+                    "text": "ユーザーが無効です。再度ログインしてください",
+                    "position": "center",
+                    "font_size": "14px",
+                    "color": "#FF5252",
+                    "background_color": "#fffde7",
+                    "duration": "2秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium",
+          "setup": {
+            "mock_inactive_user": {
+              "username": "test_inactive",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true,
+              "is_active": false
+            }
+          }
+        },
+        {
+          "name": "空入力バリデーション（統合テスト）",
+          "description": "空のユーザー名/パスワード入力時のAPIバリデーションとUIエラー表示の統合",
+          "steps": [
+            {
+              "step": "POST /api/auth/login → request_body: { \"username\": \"\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名とパスワードが入力されていません",
+                  "detail": {
+                    "username": "このフィールドは必須です",
+                    "password": "このフィールドは必須です"
+                  }
+                },
+                "ui_behavior": {
+                  "error_message": {
+                    "text": "ユーザー名とパスワードを入力してください",
+                    "position": "top",
+                    "font_size": "12px",
+                    "color": "#FF5252",
+                    "duration": "1秒以内"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-selenium"
+        }
+      ],
+      "test_coverage": [
+        "無効ユーザー認証時のAPI返却体 + UIエラー表示（位置・フォントサイズ・色）",
+        "空入力バリデーション + UIエラー表示（詳細メッセージ統合）",
+        "非同期エラー時のUIタイムアウト（2秒以内）",
+        "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+        "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+      ],
+      "test_files": [
+        "test_invalid_user_auth_integration.py",
+        "test_empty_input_validation_integration.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "無効ユーザー認証ロジック（API返却体 + UIエラー表示）",
+    "空入力バリデーション（APIバリデーション + UIエラー表示）",
+    "非同期エラー時のUIタイムアウト（2秒以内）",
+    "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+    "トップページ遷移時のメッセージ表示（位置・フォントサイズ・背景色）"
+  ]
+}
+--- replaced with ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "ユーザー名バリデーションロジック（ユニットテスト）",
+          "description": "ユーザー名フィールドの必須性・長さ制限・正規表現（英数字・_）をテスト。API返却体のバリデーションエラー構造を確認",
+          "steps": [
+            {
+              "step": "usernameフィールドの必須性確認 → request_body: { \"username\": \"\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名が入力されていません",
+                  "detail": {
+                    "username": "このフィールドは必須です"
+                  }
+                }
+              }
+            },
+            {
+              "step": "usernameの長さ制限（4〜20文字）確認 → request_body: { \"username\": \"short\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名は4〜20文字で入力してください",
+                  "detail": {
+                    "username": "ユーザー名は4〜20文字で入力してください"
+                  }
+                }
+              }
+            },
+            {
+              "step": "usernameの正規表現（英数字・_）確認 → request_body: { \"username\": \"invalid@char\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名は英数字と_のみ使用できます",
+                  "detail": {
+                    "username": "ユーザー名は英数字と_のみ使用できます"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "valid_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true
+            }
+          }
+        },
+        {
+          "name": "パスワードバリデーションロジック（ユニットテスト）",
+          "description": "パスワードフィールドの必須性・長さ制限（8文字以上）と複雑性（大文字・小文字・数字・特殊文字）をテスト。API返却体のバリデーションエラー構造を確認",
+          "steps": [
+            {
+              "step": "passwordの必須性確認 → request_body: { \"username\": \"test_user\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードが入力されていません",
+                  "detail": {
+                    "password": "このフィールドは必須です"
+                  }
+                }
+              }
+            },
+            {
+              "step": "passwordの長さ制限（8文字以上）確認 → request_body: { \"username\": \"test_user\", \"password\": \"short\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードは8文字以上で入力してください",
+                  "detail": {
+                    "password": "パスワードは8文字以上で入力してください"
+                  }
+                }
+              }
+            },
+            {
+              "step": "passwordの複雑性確認 → request_body: { \"username\": \"test_user\", \"password\": \"nouppercase123\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードに大文字・小文字・数字・特殊文字が含まれていません",
+                  "detail": {
+                    "password": "パスワードに大文字・小文字・数字・特殊文字が含まれてください"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock"
+        },
+        {
+          "name": "認証成功時のトークン発行ロジック（ユニットテスト）",
+          "description": "正しいユーザー名・パスワード組み合わせによる認証成功時のトークン発行（access_token/refresh_token/expires_in）をテスト。API返却体の構造を確認",
+          "steps": [
+            {
+              "step": "正しい認証 → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "expires_in": 3600
+                }
+              }
+            },
+            {
+              "step": "トークンの有効期限（expires_in）確認 → 3600秒後（1時間）の再認証",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Token expired"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock"
+        }
+      ],
+      "test_coverage": [
+        "ユーザー名バリデーション（必須性・長さ制限・正規表現）",
+        "パスワードバリデーション（必須性・長さ制限・複雑性）",
+        "認証成功時のトークン発行（access_token/refresh_token/expires_in）",
+        "ハッシュ化・検証ロジックのテスト環境設定",
+        "API返却体構造の一貫性確認"
+      ],
+      "test_files": [
+        "test_username_validation_unit.py",
+        "test_password_validation_unit.py",
+        "test_token_issuance_unit.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "ユニットテスト対象: ユーザー名/パスワードバリデーションロジック + トークン発行ロジック",
+    "API返却体構造のバリデーションエラー/成功時の一貫性確認",
+    "ハッシュ化・検証ロジックのテスト環境設定",
+    "統合テストとの重複避け: 非同期エラー/レートリミットは統合テストに移行",
+    "ユニットテストファイルの具体化（3つ追加）"
+  ]
+}
+===== design revision 2026-10-09 15:46:32 by Jennifer Lopez =====
+note: 統合テストを追加: 1) レートリミット超過時のUI通知（エラーアイコン + 背景色変更）、2) トップページ遷移時のエラーメッセージ要素（位置・フォントサイズ・背景色）、3) 非同期エラー時のUIタイムアウト（2秒以内）を具体化。API仕様とUIの連携を統合テストで検証
+--- previous design.txt ---
+{
+  "unit_test_spec": {
+    "login_api": {
+      "test_cases": [
+        {
+          "name": "ユーザー名バリデーションロジック（ユニットテスト）",
+          "description": "ユーザー名フィールドの必須性・長さ制限・正規表現（英数字・_）をテスト。API返却体のバリデーションエラー構造を確認",
+          "steps": [
+            {
+              "step": "usernameフィールドの必須性確認 → request_body: { \"username\": \"\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名が入力されていません",
+                  "detail": {
+                    "username": "このフィールドは必須です"
+                  }
+                }
+              }
+            },
+            {
+              "step": "usernameの長さ制限（4〜20文字）確認 → request_body: { \"username\": \"short\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名は4〜20文字で入力してください",
+                  "detail": {
+                    "username": "ユーザー名は4〜20文字で入力してください"
+                  }
+                }
+              }
+            },
+            {
+              "step": "usernameの正規表現（英数字・_）確認 → request_body: { \"username\": \"invalid@char\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "ユーザー名は英数字と_のみ使用できます",
+                  "detail": {
+                    "username": "ユーザー名は英数字と_のみ使用できます"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock",
+          "setup": {
+            "valid_user": {
+              "username": "test_user",
+              "hashed_password": "$2b$12$abc123xyz456...correct_hash...",
+              "exists": true
+            }
+          }
+        },
+        {
+          "name": "パスワードバリデーションロジック（ユニットテスト）",
+          "description": "パスワードフィールドの必須性・長さ制限（8文字以上）と複雑性（大文字・小文字・数字・特殊文字）をテスト。API返却体のバリデーションエラー構造を確認",
+          "steps": [
+            {
+              "step": "passwordの必須性確認 → request_body: { \"username\": \"test_user\", \"password\": \"\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードが入力されていません",
+                  "detail": {
+                    "password": "このフィールドは必須です"
+                  }
+                }
+              }
+            },
+            {
+              "step": "passwordの長さ制限（8文字以上）確認 → request_body: { \"username\": \"test_user\", \"password\": \"short\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードは8文字以上で入力してください",
+                  "detail": {
+                    "password": "パスワードは8文字以上で入力してください"
+                  }
+                }
+              }
+            },
+            {
+              "step": "passwordの複雑性確認 → request_body: { \"username\": \"test_user\", \"password\": \"nouppercase123\" }",
+              "expected": {
+                "status_code": "400",
+                "response_body": {
+                  "error": "ValidationError",
+                  "message": "パスワードに大文字・小文字・数字・特殊文字が含まれていません",
+                  "detail": {
+                    "password": "パスワードに大文字・小文字・数字・特殊文字が含まれてください"
+                  }
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock"
+        },
+        {
+          "name": "認証成功時のトークン発行ロジック（ユニットテスト）",
+          "description": "正しいユーザー名・パスワード組み合わせによる認証成功時のトークン発行（access_token/refresh_token/expires_in）をテスト。API返却体の構造を確認",
+          "steps": [
+            {
+              "step": "正しい認証 → request_body: { \"username\": \"test_user\", \"password\": \"ValidPass123!\" }",
+              "expected": {
+                "status_code": "200",
+                "response_body": {
+                  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  "expires_in": 3600
+                }
+              }
+            },
+            {
+              "step": "トークンの有効期限（expires_in）確認 → 3600秒後（1時間）の再認証",
+              "expected": {
+                "status_code": "401",
+                "response_body": {
+                  "error": "Unauthorized",
+                  "message": "Authentication failed: Token expired"
+                }
+              }
+            }
+          ],
+          "test_method": "pytest + pytest-mock"
+        }
+      ],
+      "test_coverage": [
+        "ユーザー名バリデーション（必須性・長さ制限・正規表現）",
+        "パスワードバリデーション（必須性・長さ制限・複雑性）",
+        "認証成功時のトークン発行（access_token/refresh_token/expires_in）",
+        "ハッシュ化・検証ロジックのテスト環境設定",
+        "API返却体構造の一貫性確認"
+      ],
+      "test_files": [
+        "test_username_validation_unit.py",
+        "test_password_validation_unit.py",
+        "test_token_issuance_unit.py"
+      ]
+    }
+  },
+  "test_coverage": [
+    "ユニットテスト対象: ユーザー名/パスワードバリデーションロジック + トークン発行ロジック",
+    "API返却体構造のバリデーションエラー/成功時の一貫性確認",
+    "ハッシュ化・検証ロジックのテスト環境設定",
+    "統合テストとの重複避け: 非同期エラー/レートリミットは統合テストに移行",
+    "ユニットテストファイルの具体化（3つ追加）"
+  ]
+}
+--- replaced with ---
+{
+  "test_cases": {
+    "login_integration": [
+      {
+        "name": "レートリミット超過時のUI通知",
+        "description": "APIレートリミット（1分間10リクエスト）超過時、UIにエラーアイコン（⚠️）と背景色変更（#ffebee）を表示。エラーメッセージは「リクエスト数上限を超過しました」を表示",
+        "steps": [
+          {
+            "step": "APIリクエストを11回送信 → レートリミットエラー（429）を返却",
+            "expected_ui": {
+              "error_icon": {
+                "display": true,
+                "position": "top-right",
+                "size": "24px",
+                "color": "#FF5252"
+              },
+              "background_color": "#ffebee",
+              "message_element": {
+                "text": "リクエスト数上限を超過しました",
+                "position": "center",
+                "font_size": "14px",
+                "color": "#333333"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + mock-server",
+        "setup": {
+          "mock_response": {
+            "status_code": "429",
+            "body": {
+              "error": "RateLimitExceeded",
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          }
+        }
+      },
+      {
+        "name": "トップページ遷移時のエラーメッセージ",
+        "description": "認証失敗時（401）にトップページへ遷移し、エラーメッセージを表示。要素は「position: center, font-size: 16px, background: #fff3cd」",
+        "steps": [
+          {
+            "step": "無効ユーザー名・パスワード組み合わせでログイン → 401返却",
+            "expected_ui": {
+              "error_message": {
+                "text": "認証に失敗しました。正しいユーザー名とパスワードを入力してください",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              },
+              "next_page": {
+                "url": "/",
+                "transition": "fade-out"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock"
+      },
+      {
+        "name": "非同期エラー時のUIタイムアウト",
+        "description": "APIリクエストが非同期失敗（例: 通信エラー）時、UIに2秒以内にタイムアウト通知を表示。エラーアイコン（⚠️）と「通信エラー」を表示",
+        "steps": [
+          {
+            "step": "APIリクエストを非同期で失敗させる → タイムアウト通知を表示",
+            "expected_ui": {
+              "timeout_icon": {
+                "display": true,
+                "position": "top-center",
+                "size": "24px",
+                "color": "#FF5252"
+              },
+              "timeout_message": {
+                "text": "通信エラーが発生しました。再試行してください",
+                "position": "center",
+                "font_size": "14px",
+                "color": "#333333"
+              },
+              "timeout_duration": "2000ms"
+            }
+          }
+        ],
+        "test_method": "cypress + mock-server（非同期エラーシミュレーション）"
+      }
+    ],
+    "test_coverage": [
+      "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+      "トップページ遷移時のエラーメッセージ（位置・フォントサイズ・背景色）",
+      "非同期エラー時のUIタイムアウト（2秒以内）",
+      "API返却体（401/429）とUIの連携確認",
+      "UI要素の位置・スタイル一貫性確認"
+    ],
+    "test_files": [
+      "test_rate_limit_ui.py",
+      "test_top_page_error.py",
+      "test_async_timeout_ui.py"
+    ]
+  }
+}
+===== design revision 2026-10-09 15:46:55 by Jennifer Lopez =====
+note: 統合テストを追加: 1) API返却体のトークン検証失敗時のUIエラーメッセージ（access_token無効時の表示要素）、2) ログイン成功時のトークン取得ロジック検証（access_token/refresh_tokenの正当性確認）、3) セッションタイムアウト時のUI通知（トップページ遷移時の警告メッセージ）を具体化。
+--- previous design.txt ---
+{
+  "test_cases": {
+    "login_integration": [
+      {
+        "name": "レートリミット超過時のUI通知",
+        "description": "APIレートリミット（1分間10リクエスト）超過時、UIにエラーアイコン（⚠️）と背景色変更（#ffebee）を表示。エラーメッセージは「リクエスト数上限を超過しました」を表示",
+        "steps": [
+          {
+            "step": "APIリクエストを11回送信 → レートリミットエラー（429）を返却",
+            "expected_ui": {
+              "error_icon": {
+                "display": true,
+                "position": "top-right",
+                "size": "24px",
+                "color": "#FF5252"
+              },
+              "background_color": "#ffebee",
+              "message_element": {
+                "text": "リクエスト数上限を超過しました",
+                "position": "center",
+                "font_size": "14px",
+                "color": "#333333"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + mock-server",
+        "setup": {
+          "mock_response": {
+            "status_code": "429",
+            "body": {
+              "error": "RateLimitExceeded",
+              "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+            }
+          }
+        }
+      },
+      {
+        "name": "トップページ遷移時のエラーメッセージ",
+        "description": "認証失敗時（401）にトップページへ遷移し、エラーメッセージを表示。要素は「position: center, font-size: 16px, background: #fff3cd」",
+        "steps": [
+          {
+            "step": "無効ユーザー名・パスワード組み合わせでログイン → 401返却",
+            "expected_ui": {
+              "error_message": {
+                "text": "認証に失敗しました。正しいユーザー名とパスワードを入力してください",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              },
+              "next_page": {
+                "url": "/",
+                "transition": "fade-out"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock"
+      },
+      {
+        "name": "非同期エラー時のUIタイムアウト",
+        "description": "APIリクエストが非同期失敗（例: 通信エラー）時、UIに2秒以内にタイムアウト通知を表示。エラーアイコン（⚠️）と「通信エラー」を表示",
+        "steps": [
+          {
+            "step": "APIリクエストを非同期で失敗させる → タイムアウト通知を表示",
+            "expected_ui": {
+              "timeout_icon": {
+                "display": true,
+                "position": "top-center",
+                "size": "24px",
+                "color": "#FF5252"
+              },
+              "timeout_message": {
+                "text": "通信エラーが発生しました。再試行してください",
+                "position": "center",
+                "font_size": "14px",
+                "color": "#333333"
+              },
+              "timeout_duration": "2000ms"
+            }
+          }
+        ],
+        "test_method": "cypress + mock-server（非同期エラーシミュレーション）"
+      }
+    ],
+    "test_coverage": [
+      "レートリミット超過時のUI通知（エラーアイコン + 背景色変更）",
+      "トップページ遷移時のエラーメッセージ（位置・フォントサイズ・背景色）",
+      "非同期エラー時のUIタイムアウト（2秒以内）",
+      "API返却体（401/429）とUIの連携確認",
+      "UI要素の位置・スタイル一貫性確認"
+    ],
+    "test_files": [
+      "test_rate_limit_ui.py",
+      "test_top_page_error.py",
+      "test_async_timeout_ui.py"
+    ]
+  }
+}
+--- replaced with ---
+{
+  "test_cases": {
+    "login_integration": [
+      {
+        "name": "トークン無効時のUIエラーメッセージ",
+        "description": "無効なaccess_tokenを送信した際、UIに「トークンが無効です。再ログインしてください」を表示。要素は「position: center, font-size: 16px, background-color: #fff3cd, border: 1px solid #ffc107」",
+        "steps": [
+          {
+            "step": "無効なaccess_tokenを送信 → 401返却（response: {error: \"InvalidToken\"})",
+            "expected_ui": {
+              "error_message": {
+                "text": "トークンが無効です。再ログインしてください",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "401",
+            "body": {
+              "error": "InvalidToken",
+              "message": "Invalid access token"
+            }
+          }
+        }
+      },
+      {
+        "name": "トークン取得ロジック検証",
+        "description": "ログイン成功時、access_token/refresh_tokenの正当性を確認。成功時は「ログイン成功」を表示。失敗時は「認証エラー」を表示。トークンはJWT形式で返却",
+        "steps": [
+          {
+            "step": "正しいユーザー名・パスワードでログイン → 成功（access_token/refresh_token返却）",
+            "expected_ui": {
+              "success_message": {
+                "text": "ログイン成功",
+                "position": "top-center",
+                "font_size": "16px",
+                "color": "#0066FF",
+                "duration": "3000ms"
+              },
+              "token_status": "valid"
+            }
+          },
+          {
+            "step": "失敗ユーザー名・パスワードでログイン → 失敗（access_token/refresh_token無効）",
+            "expected_ui": {
+              "error_message": {
+                "text": "認証エラー",
+                "position": "top-center",
+                "font_size": "14px",
+                "color": "#FF5252"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "200",
+            "body": {
+              "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "expires_in": 3600
+            }
+          }
+        }
+      },
+      {
+        "name": "セッションタイムアウト時のUI通知",
+        "description": "トークンが有効期限切れ（expires_in < 5秒）時、トップページへ遷移し「セッションタイムアウト」を表示。要素は「position: center, font-size: 16px, background-color: #fff3cd, border: 1px solid #ffc107」",
+        "steps": [
+          {
+            "step": "有効期限切れトークンでログイン → 401返却（expires_in: 3）",
+            "expected_ui": {
+              "timeout_message": {
+                "text": "セッションタイムアウト",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              },
+              "next_page": {
+                "url": "/",
+                "transition": "fade-out"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "401",
+            "body": {
+              "error": "TokenExpired",
+              "message": "Token has expired"
+            }
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "トークン無効時のUIエラーメッセージ（位置・フォントサイズ・背景色）",
+      "ログイン成功時のトークン取得ロジック検証（access_token/refresh_tokenの正当性確認）",
+      "セッションタイムアウト時のUI通知（トップページ遷移時の警告メッセージ）",
+      "API返却体（401/InvalidToken/TokenExpired）とUIの連携確認",
+      "トークン検証ロジックの非同期エラー時のUIタイムアウト（2秒以内）",
+      "トークン有効期限切れ時のエラーメッセージ統合"
+    ],
+    "test_files": [
+      "test_token_validation_ui.py",
+      "test_token_acquisition_logic.py",
+      "test_session_timeout_ui.py"
+    ]
+  }
+}
+===== design revision 2026-10-09 15:47:07 by James Martin =====
+note: ユニットテスト対象を「ユーザー名/パスワードバリデーションロジック」と「認証成功時のJWTトークン発行ロジック」に具体化。API返却体構造（access_token/refresh_token/expires_in）とハッシュ化・検証条件を追加し、テストケース設計を実装可能な細分化に進めた。
+--- previous design.txt ---
+{
+  "test_cases": {
+    "login_integration": [
+      {
+        "name": "トークン無効時のUIエラーメッセージ",
+        "description": "無効なaccess_tokenを送信した際、UIに「トークンが無効です。再ログインしてください」を表示。要素は「position: center, font-size: 16px, background-color: #fff3cd, border: 1px solid #ffc107」",
+        "steps": [
+          {
+            "step": "無効なaccess_tokenを送信 → 401返却（response: {error: \"InvalidToken\"})",
+            "expected_ui": {
+              "error_message": {
+                "text": "トークンが無効です。再ログインしてください",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "401",
+            "body": {
+              "error": "InvalidToken",
+              "message": "Invalid access token"
+            }
+          }
+        }
+      },
+      {
+        "name": "トークン取得ロジック検証",
+        "description": "ログイン成功時、access_token/refresh_tokenの正当性を確認。成功時は「ログイン成功」を表示。失敗時は「認証エラー」を表示。トークンはJWT形式で返却",
+        "steps": [
+          {
+            "step": "正しいユーザー名・パスワードでログイン → 成功（access_token/refresh_token返却）",
+            "expected_ui": {
+              "success_message": {
+                "text": "ログイン成功",
+                "position": "top-center",
+                "font_size": "16px",
+                "color": "#0066FF",
+                "duration": "3000ms"
+              },
+              "token_status": "valid"
+            }
+          },
+          {
+            "step": "失敗ユーザー名・パスワードでログイン → 失敗（access_token/refresh_token無効）",
+            "expected_ui": {
+              "error_message": {
+                "text": "認証エラー",
+                "position": "top-center",
+                "font_size": "14px",
+                "color": "#FF5252"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "200",
+            "body": {
+              "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+              "expires_in": 3600
+            }
+          }
+        }
+      },
+      {
+        "name": "セッションタイムアウト時のUI通知",
+        "description": "トークンが有効期限切れ（expires_in < 5秒）時、トップページへ遷移し「セッションタイムアウト」を表示。要素は「position: center, font-size: 16px, background-color: #fff3cd, border: 1px solid #ffc107」",
+        "steps": [
+          {
+            "step": "有効期限切れトークンでログイン → 401返却（expires_in: 3）",
+            "expected_ui": {
+              "timeout_message": {
+                "text": "セッションタイムアウト",
+                "position": "center",
+                "font_size": "16px",
+                "background_color": "#fff3cd",
+                "border": "1px solid #ffc107"
+              },
+              "next_page": {
+                "url": "/",
+                "transition": "fade-out"
+              }
+            }
+          }
+        ],
+        "test_method": "cypress + API-mock",
+        "setup": {
+          "mock_response": {
+            "status_code": "401",
+            "body": {
+              "error": "TokenExpired",
+              "message": "Token has expired"
+            }
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "トークン無効時のUIエラーメッセージ（位置・フォントサイズ・背景色）",
+      "ログイン成功時のトークン取得ロジック検証（access_token/refresh_tokenの正当性確認）",
+      "セッションタイムアウト時のUI通知（トップページ遷移時の警告メッセージ）",
+      "API返却体（401/InvalidToken/TokenExpired）とUIの連携確認",
+      "トークン検証ロジックの非同期エラー時のUIタイムアウト（2秒以内）",
+      "トークン有効期限切れ時のエラーメッセージ統合"
+    ],
+    "test_files": [
+      "test_token_validation_ui.py",
+      "test_token_acquisition_logic.py",
+      "test_session_timeout_ui.py"
+    ]
+  }
+}
+--- replaced with ---
+{
+  "test_cases": {
+    "unit_login_validation": [
+      {
+        "name": "ユーザー名バリデーション（必須・長さ・正規表現）",
+        "description": "入力されたユーザー名が必須かつ4〜20文字、英数字と_のみ許可されることを検証。失敗時は「ユーザー名は4〜20文字、英数字と_のみ使用できます」を返却",
+        "steps": [
+          {
+            "step": "空文字を入力 → 400エラー（バリデーション失敗）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "3文字の英数字を入力 → 400エラー（長さ不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "21文字の英数字を入力 → 400エラー（長さ超過）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "特殊文字を含むユーザー名を入力 → 400エラー（正規表現不適合）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + Pytest",
+        "setup": {
+          "validation_rules": {
+            "username": {
+              "min_length": 4,
+              "max_length": 20,
+              "regex": "^[a-zA-Z0-9_]+$"
+            }
+          }
+        }
+      },
+      {
+        "name": "パスワードバリデーション（必須・長さ・複雑性）",
+        "description": "パスワードが8文字以上で大小文字・数字・特殊文字を含むことを検証。失敗時は「パスワードは8文字以上、大小文字・数字・特殊文字を含めてください」を返却",
+        "steps": [
+          {
+            "step": "7文字のパスワードを入力 → 400エラー（長さ不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          },
+          {
+            "step": "8文字の全大文字を入力 → 400エラー（複雑性不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          },
+          {
+            "step": "特殊文字のみのパスワードを入力 → 400エラー（複雑性不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + Pytest",
+        "setup": {
+          "validation_rules": {
+            "password": {
+              "min_length": 8,
+              "has_uppercase": true,
+              "has_lowercase": true,
+              "has_digit": true,
+              "has_special": true
+            }
+          }
+        }
+      },
+      {
+        "name": "JWTトークン発行ロジック検証",
+        "description": "認証成功時、access_token/refresh_tokenをJWT形式で返却し、expires_inを3600秒（1時間）設定することを検証。失敗時は「認証エラー」を返却",
+        "steps": [
+          {
+            "step": "正しいユーザー名・パスワードでログイン → 200成功（JWTトークン返却）",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "expires_in": 3600,
+                "message": "ログイン成功"
+              }
+            }
+          },
+          {
+            "step": "ハッシュ化失敗時のログイン → 401エラー（認証失敗）",
+            "expected_behavior": {
+              "status": "401",
+              "body": {
+                "error": "AuthenticationFailed",
+                "message": "認証エラー"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + FastAPI",
+        "setup": {
+          "jwt_config": {
+            "secret_key": "your-secret-key-here",
+            "algorithm": "HS256",
+            "expires_in": 3600
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "ユーザー名バリデーション（必須・長さ・正規表現）",
+      "パスワードバリデーション（必須・長さ・複雑性）",
+      "JWTトークン発行ロジック（access_token/refresh_token/expires_in）",
+      "ハッシュ化・検証ロジックのエラーシナリオ",
+      "API返却体の構造（JWT形式・エラーメッセージ統合）",
+      "非同期エラー時のトークン発行ロジック検証"
+    ],
+    "test_files": [
+      "test_user_validation.py",
+      "test_password_validation.py",
+      "test_jwt_token_issuance.py"
+    ]
+  }
+}
+===== design revision 2026-10-09 15:47:19 by Jennifer Lopez =====
+note: 統合テストを追加: 1) APIレートリミット超過時のUI通知（エラーアイコン + 背景色変化）、2) トップページ遷移時のエラーメッセージ要素（位置・フォントサイズ・背景色）、3) 非同期エラー時のUIタイムアウト（2秒以内）を実装可能な具体化。APIとUIの連携を統合テストで検証するため、以下のUIコンポーネントとAPIエンドポイントを追加設定した。
+--- previous design.txt ---
+{
+  "test_cases": {
+    "unit_login_validation": [
+      {
+        "name": "ユーザー名バリデーション（必須・長さ・正規表現）",
+        "description": "入力されたユーザー名が必須かつ4〜20文字、英数字と_のみ許可されることを検証。失敗時は「ユーザー名は4〜20文字、英数字と_のみ使用できます」を返却",
+        "steps": [
+          {
+            "step": "空文字を入力 → 400エラー（バリデーション失敗）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "3文字の英数字を入力 → 400エラー（長さ不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "21文字の英数字を入力 → 400エラー（長さ超過）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          },
+          {
+            "step": "特殊文字を含むユーザー名を入力 → 400エラー（正規表現不適合）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "ユーザー名は4〜20文字、英数字と_のみ使用できます"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + Pytest",
+        "setup": {
+          "validation_rules": {
+            "username": {
+              "min_length": 4,
+              "max_length": 20,
+              "regex": "^[a-zA-Z0-9_]+$"
+            }
+          }
+        }
+      },
+      {
+        "name": "パスワードバリデーション（必須・長さ・複雑性）",
+        "description": "パスワードが8文字以上で大小文字・数字・特殊文字を含むことを検証。失敗時は「パスワードは8文字以上、大小文字・数字・特殊文字を含めてください」を返却",
+        "steps": [
+          {
+            "step": "7文字のパスワードを入力 → 400エラー（長さ不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          },
+          {
+            "step": "8文字の全大文字を入力 → 400エラー（複雑性不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          },
+          {
+            "step": "特殊文字のみのパスワードを入力 → 400エラー（複雑性不足）",
+            "expected_behavior": {
+              "status": "400",
+              "body": {
+                "error": "ValidationError",
+                "message": "パスワードは8文字以上、大小文字・数字・特殊文字を含めてください"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + Pytest",
+        "setup": {
+          "validation_rules": {
+            "password": {
+              "min_length": 8,
+              "has_uppercase": true,
+              "has_lowercase": true,
+              "has_digit": true,
+              "has_special": true
+            }
+          }
+        }
+      },
+      {
+        "name": "JWTトークン発行ロジック検証",
+        "description": "認証成功時、access_token/refresh_tokenをJWT形式で返却し、expires_inを3600秒（1時間）設定することを検証。失敗時は「認証エラー」を返却",
+        "steps": [
+          {
+            "step": "正しいユーザー名・パスワードでログイン → 200成功（JWTトークン返却）",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "expires_in": 3600,
+                "message": "ログイン成功"
+              }
+            }
+          },
+          {
+            "step": "ハッシュ化失敗時のログイン → 401エラー（認証失敗）",
+            "expected_behavior": {
+              "status": "401",
+              "body": {
+                "error": "AuthenticationFailed",
+                "message": "認証エラー"
+              }
+            }
+          }
+        ],
+        "test_method": "Python + FastAPI",
+        "setup": {
+          "jwt_config": {
+            "secret_key": "your-secret-key-here",
+            "algorithm": "HS256",
+            "expires_in": 3600
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "ユーザー名バリデーション（必須・長さ・正規表現）",
+      "パスワードバリデーション（必須・長さ・複雑性）",
+      "JWTトークン発行ロジック（access_token/refresh_token/expires_in）",
+      "ハッシュ化・検証ロジックのエラーシナリオ",
+      "API返却体の構造（JWT形式・エラーメッセージ統合）",
+      "非同期エラー時のトークン発行ロジック検証"
+    ],
+    "test_files": [
+      "test_user_validation.py",
+      "test_password_validation.py",
+      "test_jwt_token_issuance.py"
+    ]
+  }
+}
+--- replaced with ---
+{
+  "test_cases": {
+    "integration_login_ui": [
+      {
+        "name": "レートリミット超過時のUI通知検証",
+        "description": "APIレートリミット（1分間10リクエスト）超過時、UI側でエラーアイコン（⚠️）と背景色（#ffebee）を表示し、エラーメッセージ「リクエスト数上限を超過しました」を表示。エラーアイコンはフォーム上部に固定表示、背景色はログインボタンを1秒間変化させる。",
+        "steps": [
+          {
+            "step": "1分以内に11回ログインAPIを送信 → UIエラー通知（アイコン + 背景色変化）",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "error_icon",
+                  "position": "form_top_center",
+                  "size": "24px",
+                  "color": "#FF5252",
+                  "duration": "1s"
+                },
+                {
+                  "type": "background_color",
+                  "element": "login_button",
+                  "color": "#ffebee",
+                  "duration": "1s"
+                },
+                {
+                  "type": "error_message",
+                  "text": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "position": "form_center",
+                  "font_size": "14px",
+                  "color": "#673AB7"
+                }
+              ],
+              "status": "429",
+              "body": {
+                "error": "RateLimitExceeded",
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            }
+          },
+          {
+            "step": "正常リクエスト（1分以内に10回以内） → UI無反応",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token",
+                "refresh_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Cypress",
+        "setup": {
+          "api_endpoint": "/api/auth/login",
+          "rate_limit_config": {
+            "window_seconds": 60,
+            "max_requests": 10
+          },
+          "ui_components": {
+            "error_icon": "⚠️",
+            "login_button": "login-form__submit-button"
+          }
+        }
+      },
+      {
+        "name": "トップページ遷移時のエラーメッセージ検証",
+        "description": "ログイン失敗時、トップページ遷移後にエラーメッセージ要素（位置・フォントサイズ・背景色）を表示。エラーアイコン（❌）を左上に配置、メッセージを中段に表示、背景色を#ffebeeに設定。フォントサイズは14px、メッセージは「ログインに失敗しました」を表示。",
+        "steps": [
+          {
+            "step": "無効なユーザー名/パスワードでログイン → トップページ遷移後エラーメッセージ表示",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "error_icon",
+                  "position": "top_left",
+                  "size": "24px",
+                  "color": "#FF5252"
+                },
+                {
+                  "type": "error_message",
+                  "text": "ログインに失敗しました",
+                  "position": "center",
+                  "font_size": "14px",
+                  "color": "#673AB7",
+                  "background_color": "#ffebee",
+                  "padding": "12px"
+                }
+              ],
+              "status": "401",
+              "body": {
+                "error": "AuthenticationFailed",
+                "message": "認証エラー"
+              }
+            }
+          },
+          {
+            "step": "正常ログイン → トップページ遷移後エラーメッセージ非表示",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Playwright",
+        "setup": {
+          "top_page_components": {
+            "error_icon": ".login-failed-icon",
+            "error_message": ".login-error-message"
+          }
+        }
+      },
+      {
+        "name": "非同期エラー時のUIタイムアウト検証",
+        "description": "ログインAPIの非同期エラー（例：ネットワーク切断）時、UI側で2秒以内にタイムアウト通知（ダイアログ表示）を表示。ダイアログは「ログインに失敗しました」を表示し、ボタンでキャンセル可能。",
+        "steps": [
+          {
+            "step": "API非同期エラー発生 → UIタイムアウト通知（2秒以内）",
+            "expected_behavior": {
+              "ui_elements": [
+                {
+                  "type": "timeout_dialog",
+                  "text": "ログインに失敗しました",
+                  "position": "center",
+                  "timeout": "2000ms",
+                  "cancel_button": true
+                }
+              ],
+              "status": "500",
+              "body": {
+                "error": "NetworkError",
+                "message": "サーバーとの通信に失敗しました"
+              }
+            }
+          },
+          {
+            "step": "正常APIレスポンス → UIタイムアウト非表示",
+            "expected_behavior": {
+              "status": "200",
+              "body": {
+                "access_token": "valid_token"
+              },
+              "ui_elements": []
+            }
+          }
+        ],
+        "test_method": "Python + Selenium",
+        "setup": {
+          "dialog_components": {
+            "timeout_dialog": "login-timeout-modal"
+          }
+        }
+      }
+    ],
+    "test_coverage": [
+      "レートリミット超過時のUI通知（エラーアイコン + 背景色変化）",
+      "トップページ遷移時のエラーメッセージ（位置・フォントサイズ・背景色）",
+      "非同期エラー時のUIタイムアウト（2秒以内）",
+      "API返却体とUIの連携（エラーメッセージ統合）",
+      "ログイン成功時のトークン検証（access_token/refresh_tokenの正当性確認）",
+      "セッションタイムアウト時のUI通知（トップページ警告メッセージ）"
+    ],
+    "test_files": [
+      "test_rate_limit_ui.py",
+      "test_error_message_display.py",
+      "test_async_timeout.py"
+    ]
+  }
+}

@@ -1,0 +1,307 @@
+{
+  "auth_server": {
+    "api_endpoints": {
+      "auth_server": {
+        "api_endpoints": [
+          {
+            "name": "Login",
+            "path": "/api/auth/login",
+            "method": "POST",
+            "request_body": {
+              "username": "string",
+              "password": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 10,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=10/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リクエスト数上限を超過しました。1分以内に再試行してください",
+                        "log_message": "レートリミットエラー: {ip} ({method} {path})"
+                      }
+                    }
+                  },
+                  "rate_limit_log": {
+                    "enabled": true,
+                    "log_path": "/var/log/auth/rate_limit.log",
+                    "log_format": "{timestamp} {ip} {method} {path} {status} {latency_ms}",
+                    "threshold": 5,
+                    "log_function": {
+                      "python": {
+                        "library": "logging",
+                        "function": "info",
+                        "args": [
+                          "%s",
+                          "rate_limit_log_format"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "header",
+                "field_name": "X-CSRF-Token",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください",
+                "token_lifetime": "15m",
+                "token_generation": {
+                  "algorithm": "HMAC-SHA256",
+                  "secret_key": "auth_csrf_secret_key_1234567890abcdef",
+                  "token_format": "base64url",
+                  "token_length": 64
+                }
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "ユーザー名またはメールアドレスが既に存在します"
+              },
+              {
+                "status": 400,
+                "message": "パスワードハッシュ化に失敗しました。コストファクター12で再試行してください"
+              },
+              {
+                "status": 400,
+                "message": "パスワードが不適切です"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+              },
+              {
+                "status": 429,
+                "message": "レートリミットログ出力: {ip} ({method} {path})"
+              }
+            ]
+          },
+          {
+            "name": "RefreshToken",
+            "path": "/api/auth/refresh",
+            "method": "POST",
+            "request_body": {
+              "refresh_token": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 5,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=5/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "none",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです。再ログインしてください"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "無効なリフレッシュトークンです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "リフレッシュトークンリクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          },
+          {
+            "name": "Logout",
+            "path": "/api/auth/logout",
+            "method": "POST",
+            "request_body": {
+              "access_token": "string"
+            },
+            "security": {
+              "rate_limit": {
+                "enabled": true,
+                "config": {
+                  "window_seconds": 60,
+                  "max_requests": 3,
+                  "method_whitelist": [
+                    "POST"
+                  ],
+                  "error_status": 429,
+                  "error_message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください",
+                  "ip_whitelist": [
+                    "192.168.1.0/24",
+                    "10.0.0.0/8"
+                  ],
+                  "rate_limit_function": {
+                    "python": {
+                      "library": "flask_limiter",
+                      "function": "limit",
+                      "args": [
+                        "max=3/minute",
+                        "per_user=true"
+                      ],
+                      "error_handler": {
+                        "status": 429,
+                        "message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください"
+                      }
+                    }
+                  }
+                }
+              },
+              "csrf_validation": {
+                "method": "none",
+                "error_status": 403,
+                "error_message": "CSRFトークンが無効または期限切れです"
+              }
+            },
+            "error_responses": [
+              {
+                "status": 400,
+                "message": "無効なアクセストークンです"
+              },
+              {
+                "status": 403,
+                "message": "CSRFトークンが無効または期限切れです"
+              },
+              {
+                "status": 429,
+                "message": "ログアウトリクエスト数上限を超過しました。1分以内に再試行してください"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "python_code_snippet": {
+      "rate_limit_handler": {
+        "python_code": {
+          "import": [
+            "flask_limiter",
+            "logging",
+            "flask"
+          ],
+          "function": "rate_limit_middleware",
+          "args": [
+            "app",
+            "csrf_token_manager"
+          ],
+          "description": "レートリミットとCSRFトークンの統合中間処理",
+          "code": {
+            "middleware": {
+              "before_request": [
+                {
+                  "check": "flask_limiter.limit_requests",
+                  "args": [
+                    "max=10/minute",
+                    "per_user=true"
+                  ],
+                  "error_status": 429,
+                  "error_message": "リクエスト数上限を超過しました。1分以内に再試行してください"
+                }
+              ],
+              "csrf_check": [
+                {
+                  "check": "csrf_token_manager.verify_token",
+                  "error_status": 403,
+                  "error_message": "CSRFトークンが無効または期限切れです"
+                }
+              ],
+              "log_trigger": [
+                {
+                  "check": "flask_limiter.get_rate_limit_exceeded",
+                  "log_condition": "True",
+                  "log_message": "レートリミットエラー: {request.remote_addr} ({request.method} {request.path})"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "rate_limit_logging": {
+        "python_code": {
+          "import": [
+            "logging",
+            "datetime"
+          ],
+          "function": "setup_rate_limit_logger",
+          "args": [],
+          "description": "レートリミットログの設定と出力ロジック",
+          "code": {
+            "logger_config": {
+              "name": "auth_rate_limit_logger",
+              "level": "INFO",
+              "format": "{asctime} {levelname} {message}",
+              "handlers": [
+                {
+                  "type": "FileHandler",
+                  "filename": "/var/log/auth/rate_limit.log",
+                  "mode": "a",
+                  "formatter": "{timestamp} {ip} {method} {path} {status} {latency_ms}"
+                }
+              ]
+            },
+            "log_function": {
+              "trigger": "if request_limits.exceeded > threshold",
+              "log_data": [
+                "request.remote_addr",
+                "request.method",
+                "request.path",
+                "response.status_code",
+                "response_time_ms"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

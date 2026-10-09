@@ -158,6 +158,11 @@ def cancel_decisions_from_turn(room_id, from_turn):
 def refresh_active_decisions(
     room_id, department_name, extracted_decisions, current_turn, scope_anchor=None
 ):
+    if not extracted_decisions:
+    #空が返ったら「失敗かもしれない」ので、今のD-listをそのまま残す
+     print(f"room={room_id} D-list抽出が空のため既存の決定を維持します")
+     return
+
     #find結果を反映。未変更決定はorigin_turn/decision_idを保持、部分修正に差し替え可能
     existing = get_active_decisions(room_id)
     existing_by_type = {d["decision_type"]: d for d in existing}
